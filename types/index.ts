@@ -1,4 +1,5 @@
 // Updated on 2025-07-07
+// Updated on 2025-07-07
 export type EcoActivity = {
   id: string;
   type: 'cycling' | 'publicTransport' | 'recycling' | 'energySaving' | 'plantBasedMeal' | 'secondHandPurchase';
