@@ -1,13 +1,14 @@
-import Button from '@/components/Button';
-import Colors from '@/constants/Colors';
-import { useUserStore } from '@/store/userStore';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, Text, View, Image, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useUserStore } from '@/store/userStore';
+import Colors from '@/constants/Colors';
+import Button from '@/components/Button';
 
 export default function AuthScreen() {
+  console.log('AuthScreen rendered');
   const router = useRouter();
-  const { login, isLoading, error } = useUserStore();
+  const { login, isLoading, error, user } = useUserStore();
   
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
@@ -15,27 +16,35 @@ export default function AuthScreen() {
   const [name, setName] = useState('');
   const [agreeToTerms, setAgreeToTerms] = useState(false);
 
+  useEffect(() => {
+    console.log('AuthScreen useEffect, user:', user);
+  }, [user]);
+
   const handleAuth = async () => {
+    console.log('handleAuth called with email:', email, 'isLogin:', isLogin);
     if (isLogin) {
       // For demo purposes, use demo@example.com / password
       if (email === 'demo@example.com' && password === 'password') {
         await login(email, password);
-        router.replace('/(tabs)');
+        console.log('Login successful, user:', useUserStore.getState().user);
+        // router.replace('/(tabs)'); // Comment out to prevent redirect
       } else {
         // For demo, allow any login
         await login('demo@example.com', 'password');
-        router.replace('/(tabs)');
+        console.log('Demo login successful, user:', useUserStore.getState().user);
+        // router.replace('/(tabs)'); // Comment out to prevent redirect
       }
     } else {
-      // For demo, just redirect to onboarding
-      router.replace('/onboarding');
+      console.log('Sign up triggered');
+      // router.replace('/onboarding'); // Comment out to prevent redirect
     }
   };
 
   const handleSocialAuth = (provider: string) => {
+    console.log(`Social auth triggered for ${provider}`);
     // In a real app, this would authenticate with the social provider
-    // For demo, just redirect to onboarding
-    router.replace('/onboarding');
+    // For demo, just log
+    // router.replace('/onboarding'); // Comment out to prevent redirect
   };
 
   return (
