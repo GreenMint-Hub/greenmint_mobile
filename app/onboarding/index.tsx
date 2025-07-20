@@ -1,8 +1,10 @@
 import Button from '@/components/Button';
 import Colors from '@/constants/Colors';
 import { useRouter } from 'expo-router';
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { Dimensions, FlatList, Image, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useOnboarding } from '@/store/onboardingStore';
+import { useUserStore } from '@/store/userStore';
 
 const { width } = Dimensions.get('window');
 
@@ -15,20 +17,26 @@ interface OnboardingSlide {
 
 const slides: OnboardingSlide[] = [
   {
+    id: '0',
+    image: require('../../assets/images/onboard_1.png'),
+    title: 'Welcome to GreenMint',
+    description: 'Your all-in-one app for sustainable living and earning rewards',
+  },
+  {
     id: '1',
-    image: 'https://images.unsplash.com/photo-1550684848-fac1c5b4e853?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=60',
+    image: require('../../assets/images/onboard_2.png'),
     title: 'Reduce Your Carbon Footprint',
     description: 'Track eco-friendly actions and see your impact on the planet',
   },
   {
     id: '2',
-    image: 'https://images.unsplash.com/photo-1550684848-86a5d8727436?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=60',
+    image: require('../../assets/images/onboard_3.png'),
     title: 'Earn NFT Rewards',
     description: 'Complete challenges and earn unique NFTs on the blockchain',
   },
   {
     id: '3',
-    image: 'https://images.unsplash.com/photo-1550684376-efcbd6e3f031?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=60',
+    image: require('../../assets/images/onboard_4.png'),
     title: 'Buy & Sell Sustainably',
     description: 'Join our eco-marketplace and give items a second life',
   },
@@ -36,22 +44,41 @@ const slides: OnboardingSlide[] = [
 
 export default function OnboardingScreen() {
   const router = useRouter();
+  const { setOnboardingCompleted } = useOnboarding();
+  const { logout } = useUserStore();
   const [currentIndex, setCurrentIndex] = useState(0);
   const flatListRef = useRef<FlatList>(null);
 
+  useEffect(() => {
+    console.log('OnboardingScreen mounted, resetting onboarding and user state');
+    setOnboardingCompleted(false); // Reset onboarding state
+    logout(); // Clear user session
+  }, []);
+
   const handleNext = () => {
+    console.log('handleNext called, currentIndex:', currentIndex);
     if (currentIndex < slides.length - 1) {
       flatListRef.current?.scrollToIndex({
         index: currentIndex + 1,
         animated: true,
       });
     } else {
-      router.replace('/(tabs)');
+      console.log('Navigating to /(auth)');
+      try {
+        router.replace('/(auth)');
+      } catch (error) {
+        console.error('Navigation error in handleNext:', error);
+      }
     }
   };
 
   const handleSkip = () => {
-    router.replace('/(tabs)');
+    console.log('handleSkip called');
+    try {
+      router.replace('/(auth)');
+    } catch (error) {
+      console.error('Navigation error in handleSkip:', error);
+    }
   };
 
   const handleScroll = (event: any) => {
@@ -63,7 +90,7 @@ export default function OnboardingScreen() {
   const renderItem = ({ item }: { item: OnboardingSlide }) => {
     return (
       <View style={styles.slide}>
-        <Image source={{ uri: item.image }} style={styles.image} />
+        <Image source={item.image} style={styles.image} />
         <View style={styles.contentContainer}>
           <Text style={styles.title}>{item.title}</Text>
           <Text style={styles.description}>{item.description}</Text>

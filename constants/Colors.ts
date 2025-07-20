@@ -3,7 +3,7 @@ export default {
   primaryDark: "#388E3C",
   primaryLight: "#81C784",
   background: "#FFFFFF",
-  backgroundLight: "#E8F5E9",
+  backgroundLight: "#DEF3D0",
   text: "#333333",
   textLight: "#757575",
   border: "#DDDDDD",
