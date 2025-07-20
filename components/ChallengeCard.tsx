@@ -1,10 +1,10 @@
-import Colors from '@/constants/Colors';
-import { Challenge } from '@/types';
-import { Award, Bike, Leaf, Lightbulb, Recycle, Users } from 'lucide-react-native';
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import Button from './Button';
+import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
+import { Challenge } from '@/types';
+import Colors from '@/constants/Colors';
 import Card from './Card';
+import Button from './Button';
+import { Users, Award, Leaf, Bike, Lightbulb } from 'lucide-react-native';
 
 interface ChallengeCardProps {
   challenge: Challenge;
@@ -16,16 +16,14 @@ export default function ChallengeCard({ challenge, onJoin, onProgress }: Challen
   const isActive = challenge.active;
   const isCompleted = challenge.completed;
 
-  // Default empty functions to handle optional callbacks
   const handleJoin = () => {
-    if (onJoin) onJoin();
+    onJoin?.();
   };
 
   const handleProgress = () => {
-    if (onProgress) onProgress();
+    onProgress?.();
   };
 
-  // Helper function to determine which icon to show based on title
   const getChallengeIcon = () => {
     const title = challenge.title.toLowerCase();
     
@@ -34,7 +32,7 @@ export default function ChallengeCard({ challenge, onJoin, onProgress }: Challen
     } else if (title.includes('energy') || title.includes('power')) {
       return <Lightbulb size={24} color={Colors.primary} />;
     } else if (title.includes('recycle') || title.includes('waste')) {
-      return <Recycle size={24} color={Colors.primary} />;
+      return <Leaf size={24} color={Colors.primary} />;
     } else {
       return <Leaf size={24} color={Colors.primary} />;
     }
@@ -88,7 +86,7 @@ export default function ChallengeCard({ challenge, onJoin, onProgress }: Challen
               title="Log Progress" 
               variant="secondary" 
               size="small" 
-              onPress={handleProgress} 
+              onPress={onProgress || (() => {})} 
               style={styles.actionButton}
             />
           </View>
@@ -133,7 +131,7 @@ export default function ChallengeCard({ challenge, onJoin, onProgress }: Challen
                 title="Join Challenge" 
                 variant="primary" 
                 size="small" 
-                onPress={handleJoin} 
+                onPress={onJoin || (() => {})} 
                 style={styles.joinButton}
               />
             </View>
