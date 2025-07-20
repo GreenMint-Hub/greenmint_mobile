@@ -1,22 +1,22 @@
-// Updated on 2025-07-07
-// Updated on 2025-07-07
-// Updated on 2025-07-07
 import ActivityCard from '@/components/ActivityCard';
 import Button from '@/components/Button';
 import Card from '@/components/Card';
 import ProgressBar from '@/components/ProgressBar';
+import StatisticsComponent from '@/components/StatisticsComponent';
 import Colors from '@/constants/Colors';
 import { useChallengeStore } from '@/store/challengeStore';
 import { useUserStore } from '@/store/userStore';
 import { useRouter } from 'expo-router';
 import { Award, Bike, Bus, Leaf, Lightbulb, Recycle, ShoppingBag } from 'lucide-react-native';
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export default function HomeScreen() {
   const router = useRouter();
   const { user, loadUserData } = useUserStore();
   const { activeChallenges, fetchChallenges } = useChallengeStore();
+  const [activeTab, setActiveTab] = useState('Activities');
+  
 
   useEffect(() => {
     loadUserData();
@@ -156,17 +156,45 @@ export default function HomeScreen() {
         </View>
         
         <View style={styles.tabContainer}>
-          <TouchableOpacity style={[styles.tab, styles.activeTab]}>
-            <Text style={[styles.tabText, styles.activeTabText]}>Activities</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.tab}>
-            <Text style={styles.tabText}>Statistics</Text>
-          </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={[styles.tab, activeTab === 'Activities' && styles.activeTab]}
+                      onPress={() => setActiveTab('Activities')}
+                    >
+                      <Text 
+                        style={[
+                          styles.tabText, 
+                          activeTab === 'Activities' && styles.activeTabText
+                        ]}
+                      >
+                        Activities
+                      </Text>
+                    </TouchableOpacity>
+          
+                    <TouchableOpacity 
+                      style={[styles.tab, activeTab === 'Statistics' && styles.activeTab]}
+                      onPress={() => setActiveTab('Statistics')}
+                    >
+                      <Text 
+                        style={[
+                          styles.tabText, 
+                          activeTab === 'Statistics' && styles.activeTabText
+                        ]}
+                      >
+                        Statistics
+                      </Text>
+                    </TouchableOpacity>
+          
         </View>
         
-        {recentActivities.map((activity) => (
-          <ActivityCard key={activity.id} activity={activity} />
-        ))}
+       {activeTab === 'Activities' ? (
+                 <>
+                   {user.activities.map((activity) => (
+                     <ActivityCard key={activity.id} activity={activity} />
+                   ))}
+                 </>
+               ) : (
+                 <StatisticsComponent data={{ totalCO2Saved: user.totalCO2Saved, activities: user.activities }} />
+               )}
         
         <Button 
           title="View All Activities" 

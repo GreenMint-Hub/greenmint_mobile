@@ -1,13 +1,14 @@
-import ActivityCard from '@/components/ActivityCard';
-import Button from '@/components/Button';
-import Card from '@/components/Card';
-import ProgressBar from '@/components/ProgressBar';
-import Colors from '@/constants/Colors';
-import { useUserStore } from '@/store/userStore';
-import { useRouter } from 'expo-router';
-import { ChevronDown } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useUserStore } from '@/store/userStore';
+import Colors from '@/constants/Colors';
+import Card from '@/components/Card';
+import ActivityCard from '@/components/ActivityCard';
+import ProgressBar from '@/components/ProgressBar';
+import Button from '@/components/Button';
+import StatisticsComponent from '@/components/StatisticsComponent';
+import { ChevronDown } from 'lucide-react-native';
 
 export default function CarbonScreen() {
   const router = useRouter();
@@ -33,10 +34,6 @@ export default function CarbonScreen() {
 
   return (
     <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Carbon Impact</Text>
-      </View>
-
       <Card style={styles.carbonCard}>
         <View style={styles.carbonHeader}>
           <View>
@@ -121,49 +118,7 @@ export default function CarbonScreen() {
             ))}
           </>
         ) : (
-          <Card style={styles.statisticsCard}>
-            <Text style={styles.statisticsTitle}>Carbon Savings by Activity</Text>
-            
-            <View style={styles.statItem}>
-              <View style={styles.statLabel}>
-                <View style={[styles.statDot, { backgroundColor: Colors.primary }]} />
-                <Text style={styles.statText}>Recycling</Text>
-              </View>
-              <Text style={styles.statValue}>45kg CO₂</Text>
-            </View>
-            
-            <View style={styles.statItem}>
-              <View style={styles.statLabel}>
-                <View style={[styles.statDot, { backgroundColor: '#81C784' }]} />
-                <Text style={styles.statText}>Cycling</Text>
-              </View>
-              <Text style={styles.statValue}>32kg CO₂</Text>
-            </View>
-            
-            <View style={styles.statItem}>
-              <View style={styles.statLabel}>
-                <View style={[styles.statDot, { backgroundColor: '#AED581' }]} />
-                <Text style={styles.statText}>Public Transport</Text>
-              </View>
-              <Text style={styles.statValue}>28kg CO₂</Text>
-            </View>
-            
-            <View style={styles.statItem}>
-              <View style={styles.statLabel}>
-                <View style={[styles.statDot, { backgroundColor: '#C5E1A5' }]} />
-                <Text style={styles.statText}>Energy Saving</Text>
-              </View>
-              <Text style={styles.statValue}>15kg CO₂</Text>
-            </View>
-            
-            <View style={styles.statItem}>
-              <View style={styles.statLabel}>
-                <View style={[styles.statDot, { backgroundColor: '#E6EE9C' }]} />
-                <Text style={styles.statText}>Plant-based Meals</Text>
-              </View>
-              <Text style={styles.statValue}>5kg CO₂</Text>
-            </View>
-          </Card>
+          <StatisticsComponent data={{ totalCO2Saved: user.totalCO2Saved, activities: user.activities }} />
         )}
       </View>
     </ScrollView>
@@ -179,15 +134,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  header: {
-    padding: 16,
-    paddingBottom: 0,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: Colors.text,
   },
   carbonCard: {
     margin: 16,
@@ -282,39 +228,5 @@ const styles = StyleSheet.create({
   },
   activeTabText: {
     color: Colors.primary,
-  },
-  statisticsCard: {
-    padding: 16,
-  },
-  statisticsTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.text,
-    marginBottom: 16,
-  },
-  statItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  statLabel: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  statDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginRight: 8,
-  },
-  statText: {
-    fontSize: 14,
-    color: Colors.text,
-  },
-  statValue: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: Colors.text,
   },
 });

@@ -1,10 +1,13 @@
-import ChallengeCard from '@/components/ChallengeCard';
-import Colors from '@/constants/Colors';
-import { useChallengeStore } from '@/store/challengeStore';
-import { useRouter } from 'expo-router';
-import { Filter, Search } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, Alert } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useChallengeStore } from '@/store/challengeStore';
+import { useToast } from '@/hooks/useToast';
+import Colors from '@/constants/Colors';
+import ChallengeCard from '@/components/ChallengeCard';
+import Toast from '@/components/Toast';
+import { Search, Filter, Calendar } from 'lucide-react-native';
+import { Challenge } from '@/types';
 
 export default function ChallengesScreen() {
   const router = useRouter();
@@ -16,6 +19,7 @@ export default function ChallengesScreen() {
     fetchChallenges, 
     joinChallenge 
   } = useChallengeStore();
+  const { toast, showToast, hideToast } = useToast();
   const [activeTab, setActiveTab] = useState('Available');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -25,6 +29,7 @@ export default function ChallengesScreen() {
 
   const handleJoinChallenge = (challengeId: string) => {
     joinChallenge(challengeId);
+    showToast('Successfully joined the challenge!', 'success');
   };
 
   const handleLogProgress = (challengeId: string) => {
@@ -34,15 +39,24 @@ export default function ChallengesScreen() {
     });
   };
 
-  const navigateToChallengeDetails = (challengeId: string) => {
-    router.push({
-      pathname: '/challenges/details',
-      params: { id: challengeId }
-    });
+  const handleViewCalendar = () => {
+    // In a real app, this would integrate with Google Calendar or open a calendar view
+    Alert.alert(
+      'Calendar Integration',
+      'This would open your calendar or integrate with Google Calendar to show upcoming challenges.',
+      [
+        { text: 'Open Calendar', onPress: () => showToast('Calendar integration coming soon!', 'info') },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
   };
 
-  const filteredChallenges = () => {
-    let filtered = [];
+  const handleGetNotified = () => {
+    showToast('You will be notified when this challenge starts!', 'success');
+  };
+
+  const filteredChallenges = (): Challenge[] => {
+    let filtered: Challenge[] = [];
     
     if (activeTab === 'Available') {
       filtered = upcomingChallenges;
@@ -61,124 +75,145 @@ export default function ChallengesScreen() {
   };
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Challenges</Text>
-        <View style={styles.searchContainer}>
-          <View style={styles.searchInputContainer}>
-            <Search size={20} color={Colors.textLight} style={styles.searchIcon} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              placeholderTextColor={Colors.textLight}
-            />
-          </View>
-          <TouchableOpacity style={styles.filterButton}>
-            <Filter size={20} color={Colors.text} />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Your Active Challenge</Text>
-        {activeChallenges.length > 0 ? (
-          activeChallenges.map(challenge => (
-            <ChallengeCard 
-              key={challenge.id} 
-              challenge={challenge} 
-              onProgress={() => handleLogProgress(challenge.id)}
-            />
-          ))
-        ) : (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyStateText}>
-              You don't have any active challenges.
-              Join a challenge below to get started!
-            </Text>
-          </View>
-        )}
-      </View>
-
-      <View style={styles.section}>
-        <View style={styles.tabContainer}>
-          <TouchableOpacity 
-            style={[styles.tab, activeTab === 'Available' && styles.activeTab]}
-            onPress={() => setActiveTab('Available')}
-          >
-            <Text 
-              style={[
-                styles.tabText, 
-                activeTab === 'Available' && styles.activeTabText
-              ]}
-            >
-              Available
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.tab, activeTab === 'Complete' && styles.activeTab]}
-            onPress={() => setActiveTab('Complete')}
-          >
-            <Text 
-              style={[
-                styles.tabText, 
-                activeTab === 'Complete' && styles.activeTabText
-              ]}
-            >
-              Complete
-            </Text>
-          </TouchableOpacity>
-        </View>
-        
-        {filteredChallenges().map(challenge => (
-          <ChallengeCard 
-            key={challenge.id} 
-            challenge={challenge} 
-            onJoin={() => handleJoinChallenge(challenge.id)}
-          />
-        ))}
-        
-        {filteredChallenges().length === 0 && (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyStateText}>
-              {activeTab === 'Available' 
-                ? "No available challenges found. Check back later for new challenges!"
-                : "You haven't completed any challenges yet. Join a challenge to get started!"}
-            </Text>
-          </View>
-        )}
-      </View>
-
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Upcoming Challenges</Text>
-          <TouchableOpacity>
-            <Text style={styles.viewCalendarText}>View calendar</Text>
-          </TouchableOpacity>
-        </View>
-        
-        <View style={styles.upcomingContainer}>
-          <View style={styles.dateBox}>
-            <Text style={styles.monthText}>Jun</Text>
-            <Text style={styles.dayText}>15</Text>
-          </View>
-          <View style={styles.upcomingContent}>
-            <Text style={styles.upcomingTitle}>Plastic Free Challenge</Text>
-            <Text style={styles.upcomingDescription}>
-              Avoid all single-use plastics for 21 days
-            </Text>
-            <View style={styles.upcomingDetails}>
-              <Text style={styles.upcomingDetailText}>21 days</Text>
-              <Text style={styles.upcomingDetailText}>45 signed up</Text>
+    <View style={styles.container}>
+      <Toast 
+        message={toast.message}
+        type={toast.type}
+        visible={toast.visible}
+        onHide={hideToast}
+      />
+      
+      <ScrollView style={styles.scrollView}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Challenges</Text>
+          <View style={styles.searchContainer}>
+            <View style={styles.searchInputContainer}>
+              <Search size={20} color={Colors.textLight} style={styles.searchIcon} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholderTextColor={Colors.textLight}
+              />
             </View>
-            <TouchableOpacity style={styles.notifyButton}>
-              <Text style={styles.notifyButtonText}>Get Notified</Text>
+            <TouchableOpacity style={styles.filterButton}>
+              <Filter size={20} color={Colors.text} />
             </TouchableOpacity>
           </View>
         </View>
-      </View>
-    </ScrollView>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Your Active Challenge</Text>
+          {activeChallenges.length > 0 ? (
+            activeChallenges.map(challenge => (
+              <ChallengeCard 
+                key={challenge.id} 
+                challenge={challenge} 
+                onProgress={() => handleLogProgress(challenge.id)}
+              />
+            ))
+          ) : (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>
+                You don't have any active challenges.
+                Join a challenge below to get started!
+              </Text>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.tabContainer}>
+            <TouchableOpacity 
+              style={[styles.tab, activeTab === 'Available' && styles.activeTab]}
+              onPress={() => setActiveTab('Available')}
+            >
+              <Text 
+                style={[
+                  styles.tabText, 
+                  activeTab === 'Available' && styles.activeTabText
+                ]}
+              >
+                Available
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.tab, activeTab === 'Complete' && styles.activeTab]}
+              onPress={() => setActiveTab('Complete')}
+            >
+              <Text 
+                style={[
+                  styles.tabText, 
+                  activeTab === 'Complete' && styles.activeTabText
+                ]}
+              >
+                Complete
+              </Text>
+            </TouchableOpacity>
+          </View>
+          
+          {filteredChallenges().map(challenge => (
+            <ChallengeCard 
+              key={challenge.id} 
+              challenge={challenge} 
+              onJoin={() => handleJoinChallenge(challenge.id)}
+            />
+          ))}
+          
+          {filteredChallenges().length === 0 && (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>
+                {activeTab === 'Available' 
+                  ? "No available challenges found. Check back later for new challenges!"
+                  : "You haven't completed any challenges yet. Join a challenge to get started!"}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Upcoming Challenges</Text>
+            <TouchableOpacity onPress={handleViewCalendar}>
+              <View style={styles.calendarButton}>
+                <Calendar size={16} color={Colors.primary} />
+                <Text style={styles.viewCalendarText}>View calendar</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+          
+          <View style={styles.upcomingContainer}>
+            <View style={styles.dateBox}>
+              <Text style={styles.monthText}>Jun</Text>
+              <Text style={styles.dayText}>15</Text>
+            </View>
+            <View style={styles.upcomingContent}>
+              <Text style={styles.upcomingTitle}>Plastic Free Challenge</Text>
+              <Text style={styles.upcomingDescription}>
+                Avoid all single-use plastics for 21 days
+              </Text>
+              <View style={styles.upcomingDetails}>
+                <Text style={styles.upcomingDetailText}>21 days</Text>
+                <Text style={styles.upcomingDetailText}>45 signed up</Text>
+              </View>
+              <TouchableOpacity style={styles.notifyButton} onPress={handleGetNotified}>
+                <Text style={styles.notifyButtonText}>Get Notified</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <TouchableOpacity 
+            style={styles.leaderboardButton}
+            onPress={() => router.push('/challenges/leaderboard')}
+          >
+            <Text style={styles.leaderboardButtonText}>View Challenge Leaderboard</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -186,6 +221,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.white,
+  },
+  scrollView: {
+    flex: 1,
   },
   header: {
     padding: 16,
@@ -244,9 +282,14 @@ const styles = StyleSheet.create({
     color: Colors.text,
     marginBottom: 12,
   },
+  calendarButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   viewCalendarText: {
     color: Colors.primary,
     fontWeight: '500',
+    marginLeft: 4,
   },
   tabContainer: {
     flexDirection: 'row',
@@ -342,5 +385,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     color: Colors.text,
+  },
+  leaderboardButton: {
+    backgroundColor: Colors.primary,
+    paddingVertical: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  leaderboardButtonText: {
+    color: Colors.white,
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
