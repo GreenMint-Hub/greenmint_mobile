@@ -23,6 +23,7 @@ export type EcoActivity = {
   verified: boolean;
   status?: 'pending' | 'verified' | 'rejected' | 'voting';
   user?: { name: string };
+  votes?: { userId: string; value: 'yes' | 'no' | 'fake' | 'spam' }[];
 };
 
 export type Challenge = {
@@ -71,8 +72,9 @@ export type Notification = {
 
 export type UserProfile = {
   id: string;
-  name: string;
   email: string;
+  role: 'user' | 'admin';
+  name: string;
   avatar?: string;
   ecoPoints: number;
   totalCO2Saved: number;

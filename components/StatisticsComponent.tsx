@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Dimensions } from 'react-native';
 import Colors from '@/constants/Colors';
@@ -466,3 +467,5 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 });
+ 
+

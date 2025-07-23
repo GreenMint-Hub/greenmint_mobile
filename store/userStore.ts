@@ -42,10 +42,19 @@ export const useUserStore = create<UserState>()(
         try {
           console.log('Attempting to login with:', { email, password: '***' });
           console.log('API URL:', `${API_URL}/auth/login`);
-          
           const res = await axios.post(`${API_URL}/auth/login`, { email, password });
           console.log('Login successful:', res.data);
-          set({ user: res.data.user, token: res.data.accessToken, isLoading: false });
+          set({
+            user: {
+              id: res.data.user._id,
+              email: res.data.user.email,
+              role: res.data.user.role,
+              name: res.data.user.username || res.data.user.name || '',
+              // ...add other fields as needed
+            },
+            token: res.data.accessToken,
+            isLoading: false
+          });
         } catch (error: any) {
           console.error('Login failed:', error);
           console.error('Error response:', error.response?.data);
@@ -59,10 +68,19 @@ export const useUserStore = create<UserState>()(
         try {
           console.log('Attempting to register with:', { username, email, password: '***' });
           console.log('API URL:', `${API_URL}/auth/register`);
-          
           const res = await axios.post(`${API_URL}/auth/register`, { username, email, password });
           console.log('Registration successful:', res.data);
-          set({ user: res.data.user, token: res.data.accessToken, isLoading: false });
+          set({
+            user: {
+              id: res.data.user._id,
+              email: res.data.user.email,
+              role: res.data.user.role,
+              name: res.data.user.username || res.data.user.name || '',
+              // ...add other fields as needed
+            },
+            token: res.data.accessToken,
+            isLoading: false
+          });
         } catch (error: any) {
           console.error('Registration failed:', error);
           console.error('Error response:', error.response?.data);
