@@ -14,13 +14,15 @@
 // Updated on 2025-07-07
 export type EcoActivity = {
   id: string;
-  type: 'cycling' | 'publicTransport' | 'recycling' | 'energySaving' | 'plantBasedMeal' | 'secondHandPurchase';
+  type: 'walking' | 'cycling' | 'publicTransport' | 'recycling' | 'energySaving' | 'plantBasedMeal' | 'secondHandPurchase';
   title: string;
   description: string;
   date: string;
   co2Saved: number;
   points: number;
   verified: boolean;
+  status?: 'pending' | 'verified' | 'rejected' | 'voting';
+  user?: { name: string };
 };
 
 export type Challenge = {
