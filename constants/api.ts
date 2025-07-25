@@ -5,8 +5,7 @@
 const isDevelopment = __DEV__;
 
 export const API_CONFIG = {
-  // Development: Use IP address for mobile testing
-  // Production: Use actual domain
+  
   BASE_URL: isDevelopment 
     ? 'http://192.168.8.26:4000'  // Your computer's IP for mobile testing
     : 'https://your-production-domain.com', // Replace with your production domain

@@ -5,7 +5,6 @@ import Card from './Card';
 import { TrendingUp, TrendingDown, BarChart3, PieChart } from 'lucide-react-native';
 
 const { width } = Dimensions.get('window');
-
 interface StatisticsComponentProps {
   data: {
     totalCO2Saved: number;
