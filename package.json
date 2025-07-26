@@ -15,10 +15,12 @@
   "dependencies": {
     "@expo/vector-icons": "^14.1.0",
     "@nkzw/create-context-hook": "^1.1.0",
+    "@noble/hashes": "^1.8.0",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-navigation/bottom-tabs": "^7.3.10",
     "@react-navigation/elements": "^2.3.8",
     "@react-navigation/native": "^7.1.6",
+    "ethers": "^6.15.0",
     "expo": "^53.0.4",
     "expo-blur": "~14.1.4",
     "expo-constants": "~17.1.4",

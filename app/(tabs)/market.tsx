@@ -1,25 +1,37 @@
+
 import MarketplaceItem from '@/components/MarketplaceItem';
 import Colors from '@/constants/Colors';
-import { useMarketplaceStore } from '@/store/marketplaceStore';
 import { useRouter } from 'expo-router';
 import { Filter, Search, SlidersHorizontal } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
-import { FlatList, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { FlatList, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, ActivityIndicator } from 'react-native';
+import { ethers } from 'ethers';
+import { getMarketplaceListings } from '../../utils/contractHelpers';
+
 
 export default function MarketScreen() {
   const router = useRouter();
-  const { items, filteredItems, fetchItems, setSearchQuery } = useMarketplaceStore();
   const [activeTab, setActiveTab] = useState('Buy');
   const [localSearchQuery, setLocalSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
+  const [listings, setListings] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchItems();
-  }, []);
+    if (activeTab === 'Buy') {
+      setLoading(true);
+      setError(null);
+      const provider = new ethers.JsonRpcProvider('https://mainnet.infura.io/v3/YOUR_INFURA_KEY'); // Replace with your RPC
+      getMarketplaceListings(provider)
+        .then(setListings)
+        .catch(() => setError('Failed to fetch listings'))
+        .finally(() => setLoading(false));
+    }
+  }, [activeTab]);
 
   const handleSearch = (text: string) => {
     setLocalSearchQuery(text);
-    setSearchQuery(text);
   };
 
   const navigateToItemDetails = (itemId: string) => {
@@ -116,26 +128,47 @@ export default function MarketScreen() {
       </ScrollView>
 
       <View style={styles.itemsContainer}>
-        <FlatList
-          data={filteredItems}
-          renderItem={({ item }) => (
-            <MarketplaceItem 
-              item={item}
-              onPress={() => navigateToItemDetails(item.id)}
-            />
-          )}
-          keyExtractor={(item) => item.id}
-          numColumns={2}
-          columnWrapperStyle={styles.itemsRow}
-          showsVerticalScrollIndicator={false}
-          ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>
-                No items found. Try adjusting your search or filters.
-              </Text>
-            </View>
-          }
-        />
+        {loading ? (
+          <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 32 }} />
+        ) : error ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>{error}</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={listings.filter(item => {
+              // Filter by search and category
+              const matchesSearch = localSearchQuery === '' || (item.ipfsDescription?.toLowerCase().includes(localSearchQuery.toLowerCase()));
+              const matchesCategory = selectedCategory === 'ALL' || (item.ipfsDescription?.toLowerCase().includes(selectedCategory.toLowerCase()));
+              return matchesSearch && matchesCategory;
+            })}
+            renderItem={({ item }) => (
+              <MarketplaceItem 
+                item={{
+                  id: item.listingId?.toString() ?? '',
+                  title: item.ipfsDescription ?? 'No Title',
+                  price: Number(ethers.formatEther(item.price ?? '0')),
+                  image: '', // Optionally fetch from IPFS if available
+                  co2Saved: 0,
+                  condition: item.isActive ? 'Active' : 'Inactive',
+                  seller: item.seller,
+                }}
+                onPress={() => navigateToItemDetails(item.listingId?.toString() ?? '')}
+              />
+            )}
+            keyExtractor={(item) => item.listingId?.toString() ?? ''}
+            numColumns={2}
+            columnWrapperStyle={styles.itemsRow}
+            showsVerticalScrollIndicator={false}
+            ListEmptyComponent={
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyStateText}>
+                  No items found. Try adjusting your search or filters.
+                </Text>
+              </View>
+            }
+          />
+        )}
       </View>
     </View>
   );
