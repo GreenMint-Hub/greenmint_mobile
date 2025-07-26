@@ -8,7 +8,7 @@ import { API_CONFIG } from '@/constants/api';
 const ACTION_TYPES = [
   { label: 'Walking', value: 'walking' },
   { label: 'Biking', value: 'biking' },
-  { label: 'Driving', value: 'driving' },
+  { label: 'Cycling', value: 'cycling' },
 ];
 
 export default function LogSensorAction() {

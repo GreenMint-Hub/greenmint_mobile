@@ -19,15 +19,14 @@ SplashScreen.preventAutoHideAsync();
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, token, clearStore } = useUserStore();
   const router = useRouter();
-  const segments = useSegments();
+  const segments = useSegments() as string[];
 
   useEffect(() => {
+    if (!Array.isArray(segments) || segments.length === 0) return; // Wait until navigation tree is ready
     const inAuthFlow = segments[0] === "onboarding" || segments[0] === "(auth)";
     const inMainApp = segments[0] === "(tabs)";
-    
     // Check if user is authenticated
     const isAuthenticated = user && token;
-    
     console.log('AuthGuard Debug:', {
       user: !!user,
       token: !!token,
@@ -36,7 +35,6 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
       inAuthFlow,
       inMainApp
     });
-    
     if (!isAuthenticated) {
       // User is not authenticated
       if (!inAuthFlow) {
