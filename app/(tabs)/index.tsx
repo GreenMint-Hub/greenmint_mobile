@@ -1,27 +1,48 @@
+
+// Updated on 2025-07-07
+// Updated on 2025-07-07
+// Updated on 2025-07-07
 import ActivityCard from '@/components/ActivityCard';
 import Button from '@/components/Button';
 import Card from '@/components/Card';
 import ProgressBar from '@/components/ProgressBar';
-import StatisticsComponent from '@/components/StatisticsComponent';
 import Colors from '@/constants/Colors';
 import { useChallengeStore } from '@/store/challengeStore';
 import { useUserStore } from '@/store/userStore';
 import { useRouter } from 'expo-router';
 import { Award, Bike, Bus, Leaf, Lightbulb, Recycle, ShoppingBag } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View, Alert } from 'react-native';
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { user, loadUserData } = useUserStore();
+  const { user, loadUserData, getWalletStatus, mintNFT } = useUserStore();
   const { activeChallenges, fetchChallenges } = useChallengeStore();
-  const [activeTab, setActiveTab] = useState('Activities');
-  
+  const [walletStatus, setWalletStatus] = useState<any>(null);
 
   useEffect(() => {
     loadUserData();
     fetchChallenges();
+    loadWalletStatus();
   }, []);
+
+  const loadWalletStatus = async () => {
+    const status = await getWalletStatus();
+    setWalletStatus(status);
+  };
+
+  const handleMintNFT = async () => {
+    try {
+      await mintNFT({
+        title: 'Green Guardian NFT',
+        description: 'Earned for environmental achievements',
+        carbonSaved: user?.totalCO2Saved || 0,
+      });
+      Alert.alert('Success', 'NFT minted successfully!');
+    } catch (error) {
+      Alert.alert('Error', 'Failed to mint NFT');
+    }
+  };
 
   const navigateToLogActivity = () => {
     router.push('/activity/log');
@@ -33,32 +54,30 @@ export default function HomeScreen() {
 
   if (!user) {
     return (
-      <View style={styles.loadingContainer}>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
         <Text>Loading...</Text>
       </View>
     );
   }
 
-  const recentActivities = user.activities.slice(0, 3);
+  const recentActivities = user.activities?.slice(0, 3) || [];
   const activeChallenge = activeChallenges[0];
 
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>GreenMint</Text>
-        <View style={styles.pointsContainer}>
-          <Text style={styles.pointsText}>{user.ecoPoints} EcoPoints</Text>
-        </View>
+        <Text style={styles.title}>Welcome, {user.name || 'User'}!</Text>
+        <Text style={styles.points}>Total Points: {user.ecoPoints || 0}</Text>
       </View>
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Carbon Impact</Text>
         <Card style={styles.carbonCard}>
           <Text style={styles.carbonLabel}>Total CO₂ Saved</Text>
-          <Text style={styles.carbonValue}>{user.totalCO2Saved}kg</Text>
+          <Text style={styles.carbonValue}>{user.totalCO2Saved || 0}kg</Text>
           
           <ProgressBar 
-            progress={user.totalCO2Saved} 
+            progress={user.totalCO2Saved || 0} 
             total={200} 
             color={Colors.primary}
             backgroundColor="rgba(76, 175, 80, 0.2)"
@@ -76,7 +95,7 @@ export default function HomeScreen() {
             </View>
             <View style={styles.timeframeItem}>
               <Text style={styles.timeframeLabel}>Monthly</Text>
-              <Text style={styles.timeframeValue}>{user.totalCO2Saved}kg</Text>
+              <Text style={styles.timeframeValue}>{user.totalCO2Saved || 0}kg</Text>
             </View>
           </View>
         </Card>
@@ -156,45 +175,17 @@ export default function HomeScreen() {
         </View>
         
         <View style={styles.tabContainer}>
-                    <TouchableOpacity 
-                      style={[styles.tab, activeTab === 'Activities' && styles.activeTab]}
-                      onPress={() => setActiveTab('Activities')}
-                    >
-                      <Text 
-                        style={[
-                          styles.tabText, 
-                          activeTab === 'Activities' && styles.activeTabText
-                        ]}
-                      >
-                        Activities
-                      </Text>
-                    </TouchableOpacity>
-          
-                    <TouchableOpacity 
-                      style={[styles.tab, activeTab === 'Statistics' && styles.activeTab]}
-                      onPress={() => setActiveTab('Statistics')}
-                    >
-                      <Text 
-                        style={[
-                          styles.tabText, 
-                          activeTab === 'Statistics' && styles.activeTabText
-                        ]}
-                      >
-                        Statistics
-                      </Text>
-                    </TouchableOpacity>
-          
+          <TouchableOpacity style={[styles.tab, styles.activeTab]}>
+            <Text style={[styles.tabText, styles.activeTabText]}>Activities</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.tab}>
+            <Text style={styles.tabText}>Statistics</Text>
+          </TouchableOpacity>
         </View>
         
-       {activeTab === 'Activities' ? (
-                 <>
-                   {user.activities.map((activity) => (
-                     <ActivityCard key={activity.id} activity={activity} />
-                   ))}
-                 </>
-               ) : (
-                 <StatisticsComponent data={{ totalCO2Saved: user.totalCO2Saved, activities: user.activities }} />
-               )}
+        {recentActivities.map((activity) => (
+          <ActivityCard key={activity.id} activity={activity} />
+        ))}
         
         <Button 
           title="View All Activities" 
@@ -218,8 +209,8 @@ export default function HomeScreen() {
             </View>
           </View>
           <ProgressBar 
-            progress={user.totalCO2Saved} 
-            total={user.totalCO2Saved + 50} 
+            progress={user.totalCO2Saved || 0} 
+            total={user.totalCO2Saved || 0 + 50} 
             showPercentage={false}
             color={Colors.primary}
             backgroundColor="rgba(76, 175, 80, 0.2)"
@@ -243,6 +234,34 @@ export default function HomeScreen() {
             color={Colors.primary}
             backgroundColor="rgba(76, 175, 80, 0.2)"
           />
+        </Card>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Blockchain Status</Text>
+        <Card style={styles.blockchainCard}>
+          <View style={styles.blockchainHeader}>
+            <Text style={styles.blockchainTitle}>
+              {walletStatus?.connected ? 'Wallet Connected' : 'Wallet Not Connected'}
+            </Text>
+            <Text style={styles.blockchainSubtitle}>
+              {walletStatus?.connected ? walletStatus.address : 'Connect your wallet to claim rewards'}
+            </Text>
+          </View>
+          <View style={styles.blockchainActions}>
+            <Button 
+              title="Connect Wallet" 
+              variant="outline" 
+              onPress={() => router.push('/nft')}
+              style={styles.blockchainButton}
+            />
+            <Button 
+              title="Mint NFT" 
+              variant="primary" 
+              onPress={handleMintNFT}
+              style={styles.blockchainButton}
+            />
+          </View>
         </Card>
       </View>
     </ScrollView>
@@ -281,6 +300,11 @@ const styles = StyleSheet.create({
   pointsText: {
     color: Colors.white,
     fontWeight: '500',
+  },
+  points: {
+    fontSize: 14,
+    color: Colors.white,
+    marginTop: 4,
   },
   section: {
     padding: 16,
@@ -426,4 +450,29 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.textLight,
   },
+  blockchainCard: {
+    padding: 16,
+  },
+  blockchainHeader: {
+    marginBottom: 16,
+  },
+  blockchainTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.text,
+    marginBottom: 4,
+  },
+  blockchainSubtitle: {
+    fontSize: 14,
+    color: Colors.textLight,
+  },
+  blockchainActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  blockchainButton: {
+    flex: 1,
+    marginHorizontal: 4,
+  },
 });
+

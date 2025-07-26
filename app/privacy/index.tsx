@@ -123,7 +123,6 @@ export default function PrivacyScreen() {
           <Text style={styles.sectionTitle}>9. Changes to This Policy</Text>
           <Text style={styles.paragraph}>
             We may update this Privacy Policy from time to time. We will notify you of any material 
-            changes by posting the new policy in the app and updating the "Last updated" date.
           </Text>
         </Card>
 

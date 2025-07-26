@@ -1,400 +1,341 @@
+
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, Alert } from 'react-native';
-import { useRouter } from 'expo-router';
-import { useChallengeStore } from '@/store/challengeStore';
-import { useToast } from '@/hooks/useToast';
-import Colors from '@/constants/Colors';
-import ChallengeCard from '@/components/ChallengeCard';
-import Toast from '@/components/Toast';
-import { Search, Filter, Calendar } from 'lucide-react-native';
-import { Challenge } from '@/types';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, TextInput } from 'react-native';
+import { API_CONFIG } from '@/constants/api';
+import { useUserStore } from '@/store/userStore';
+import Button from '@/components/Button';
 
 export default function ChallengesScreen() {
-  const router = useRouter();
-  const { 
-    challenges, 
-    activeChallenges, 
-    completedChallenges, 
-    upcomingChallenges, 
-    fetchChallenges, 
-    joinChallenge 
-  } = useChallengeStore();
-  const { toast, showToast, hideToast } = useToast();
-  const [activeTab, setActiveTab] = useState('Available');
-  const [searchQuery, setSearchQuery] = useState('');
+  const { user, token } = useUserStore();
+  const [tab, setTab] = useState<'available' | 'my' | 'admin'>('available');
+  const [available, setAvailable] = useState<any[]>([]);
+  const [myChallenges, setMyChallenges] = useState<any[]>([]);
+  const [allChallenges, setAllChallenges] = useState<any[]>([]); // For admin
+  const [selected, setSelected] = useState<any | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [createForm, setCreateForm] = useState({ name: '', description: '', goalPoints: '', startDate: '', endDate: '' });
+  const [createError, setCreateError] = useState('');
+
+  // Fetch available, my, and all challenges
+  const fetchChallenges = async () => {
+    setLoading(true);
+    try {
+      const [availRes, myRes, allRes] = await Promise.all([
+        fetch(`${API_CONFIG.API_URL}/challenge/available`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }).then(r => r.json()),
+        fetch(`${API_CONFIG.API_URL}/challenge/my`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }).then(r => r.json()),
+        user?.role === 'admin'
+          ? fetch(`${API_CONFIG.API_URL}/challenge`, {
+              headers: { Authorization: `Bearer ${token}` },
+            }).then(r => r.json())
+          : Promise.resolve([]),
+      ]);
+      setAvailable(Array.isArray(availRes) ? availRes : []);
+      setMyChallenges(Array.isArray(myRes) ? myRes : []);
+      setAllChallenges(Array.isArray(allRes) ? allRes : []);
+    } catch (e) {
+      Alert.alert('Error', 'Failed to load challenges');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     fetchChallenges();
   }, []);
 
-  const handleJoinChallenge = (challengeId: string) => {
-    joinChallenge(challengeId);
-    showToast('Successfully joined the challenge!', 'success');
+  // Join a challenge
+  const joinChallenge = async (id: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_CONFIG.API_URL}/challenge/join/${id}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        let errMsg = 'Failed to join challenge';
+        try {
+          const err = await res.json();
+          errMsg = err.message || errMsg;
+        } catch {}
+        Alert.alert('Error', errMsg);
+        throw new Error(errMsg);
+      }
+      Alert.alert('Joined!', 'You have joined the challenge.');
+      fetchChallenges();
+    } catch (e) {
+      Alert.alert('Error', 'Failed to join challenge');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleLogProgress = (challengeId: string) => {
-    router.push({
-      pathname: '/activity/log',
-      params: { challengeId }
-    });
+  // Fetch challenge details
+  const fetchChallengeDetails = async (id: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_CONFIG.API_URL}/challenge/${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      setSelected(data);
+    } catch (e) {
+      Alert.alert('Error', 'Failed to load challenge details');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleViewCalendar = () => {
-    // In a real app, this would integrate with Google Calendar or open a calendar view
-    Alert.alert(
-      'Calendar Integration',
-      'This would open your calendar or integrate with Google Calendar to show upcoming challenges.',
-      [
-        { text: 'Open Calendar', onPress: () => showToast('Calendar integration coming soon!', 'info') },
-        { text: 'Cancel', style: 'cancel' },
-      ]
+  // Fetch leaderboard
+  const fetchLeaderboard = async (id: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_CONFIG.API_URL}/challenge/leaderboard/${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      setSelected((prev: any) => ({ ...prev, leaderboard: data }));
+    } catch (e) {
+      Alert.alert('Error', 'Failed to load leaderboard');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Admin: Create challenge
+  const createChallenge = async () => {
+    setCreateError('');
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_CONFIG.API_URL}/challenge`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          name: createForm.name,
+          description: createForm.description,
+          goalPoints: Number(createForm.goalPoints),
+          startDate: createForm.startDate,
+          endDate: createForm.endDate,
+        }),
+      });
+      if (!res.ok) {
+        let errMsg = 'Failed to create challenge';
+        try {
+          const err = await res.json();
+          errMsg = err.message || errMsg;
+        } catch {}
+        setCreateError(errMsg);
+        throw new Error(errMsg);
+      }
+      setCreateForm({ name: '', description: '', goalPoints: '', startDate: '', endDate: '' });
+      fetchChallenges();
+      Alert.alert('Success', 'Challenge created!');
+    } catch (e: any) {
+      setCreateError(e.message || 'Failed to create challenge');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // UI for a single challenge card
+  const ChallengeCard = ({ challenge, joined }: { challenge: any; joined?: boolean }) => (
+    <TouchableOpacity
+      style={styles.card}
+      onPress={() => joined ? fetchChallengeDetails(challenge._id) : null}
+      activeOpacity={joined ? 0.7 : 1}
+    >
+      <Text style={styles.title}>{challenge.name}</Text>
+      <Text style={styles.desc}>{challenge.description}</Text>
+      <Text style={styles.info}>Goal: {challenge.goalPoints} points</Text>
+      <Text style={styles.info}>Ends: {new Date(challenge.endDate).toLocaleString()}</Text>
+      {joined ? (
+        <Text style={styles.info}>Status: {challenge.status}</Text>
+      ) : (
+        <Button title="Join" onPress={() => joinChallenge(challenge._id)} />
+      )}
+    </TouchableOpacity>
+  );
+
+  // UI for challenge details and leaderboard
+  const ChallengeDetails = ({ challenge }: { challenge: any }) => (
+    <View style={styles.detailsContainer}>
+      <Text style={styles.title}>{challenge.name}</Text>
+      <Text style={styles.desc}>{challenge.description}</Text>
+      <Text style={styles.info}>Goal: {challenge.goalPoints} points</Text>
+      <Text style={styles.info}>Ends: {new Date(challenge.endDate).toLocaleString()}</Text>
+      <Text style={styles.info}>Status: {challenge.status}</Text>
+      {/* Show participants and their points */}
+      {challenge.participants && challenge.participants.length > 0 && (
+        <View style={{ marginTop: 12 }}>
+          <Text style={styles.leaderboardTitle}>Participants</Text>
+          {challenge.participants.map((p: any, i: number) => (
+            <Text key={p.user?._id || i} style={styles.leaderboardEntry}>
+              {i + 1}. {(p.user && (p.user.username || p.user.email)) || 'Unknown User'} - {p.points} points
+            </Text>
+          ))}
+        </View>
+      )}
+      <Button title="Show Leaderboard" onPress={() => fetchLeaderboard(challenge._id)} style={{ marginVertical: 8 }} />
+      {challenge.leaderboard && (
+        <View style={styles.leaderboard}>
+          <Text style={styles.leaderboardTitle}>Leaderboard</Text>
+          {challenge.leaderboard.map((p: any, i: number) => (
+            <Text key={p.user?._id || i} style={styles.leaderboardEntry}>
+              {i + 1}. {(p.user && (p.user.username || p.user.email)) || 'Unknown User'} - {p.points} points
+              {challenge.winner && challenge.winner === (p.user && p.user._id) && ' 🏆'}
+            </Text>
+          ))}
+        </View>
+      )}
+      <Button title="Back" onPress={() => setSelected(null)} style={{ marginTop: 12 }} />
+    </View>
+  );
+
+  // Admin: List all challenges
+  const AdminChallengeCard = ({ challenge }: { challenge: any }) => (
+    <TouchableOpacity
+      style={styles.card}
+      onPress={() => fetchChallengeDetails(challenge._id)}
+      activeOpacity={0.7}
+    >
+      <Text style={styles.title}>{challenge.name}</Text>
+      <Text style={styles.desc}>{challenge.description}</Text>
+      <Text style={styles.info}>Goal: {challenge.goalPoints} points</Text>
+      <Text style={styles.info}>Ends: {new Date(challenge.endDate).toLocaleString()}</Text>
+      <Text style={styles.info}>Status: {challenge.status}</Text>
+    </TouchableOpacity>
+  );
+
+  // Only show Admin tab and features if user is admin
+  const isAdmin = user?.role === 'admin';
+
+  // Show total points and carbon saved at the top
+  const pointsSection = (
+    <View style={{ padding: 16 }}>
+      <Text style={{ fontWeight: 'bold', fontSize: 16 }}>Total Points: {user?.ecoPoints || 0}</Text>
+      <Text style={{ fontSize: 15, color: '#888' }}>Total Carbon Saved: {(user?.ecoPoints || 0) / 2} kg</Text>
+    </View>
+  );
+
+  if (!user || !token) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <Text>Please log in to view challenges.</Text>
+      </View>
     );
-  };
-
-  const handleGetNotified = () => {
-    showToast('You will be notified when this challenge starts!', 'success');
-  };
-
-  const filteredChallenges = (): Challenge[] => {
-    let filtered: Challenge[] = [];
-    
-    if (activeTab === 'Available') {
-      filtered = upcomingChallenges;
-    } else if (activeTab === 'Complete') {
-      filtered = completedChallenges;
-    }
-    
-    if (searchQuery) {
-      filtered = filtered.filter(challenge => 
-        challenge.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        challenge.description.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
-    
-    return filtered;
-  };
+  }
 
   return (
-    <View style={styles.container}>
-      <Toast 
-        message={toast.message}
-        type={toast.type}
-        visible={toast.visible}
-        onHide={hideToast}
-      />
-      
-      <ScrollView style={styles.scrollView}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Challenges</Text>
-          <View style={styles.searchContainer}>
-            <View style={styles.searchInputContainer}>
-              <Search size={20} color={Colors.textLight} style={styles.searchIcon} />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search"
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                placeholderTextColor={Colors.textLight}
-              />
-            </View>
-            <TouchableOpacity style={styles.filterButton}>
-              <Filter size={20} color={Colors.text} />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Your Active Challenge</Text>
-          {activeChallenges.length > 0 ? (
-            activeChallenges.map(challenge => (
-              <ChallengeCard 
-                key={challenge.id} 
-                challenge={challenge} 
-                onProgress={() => handleLogProgress(challenge.id)}
-              />
-            ))
-          ) : (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>
-                You don't have any active challenges.
-                Join a challenge below to get started!
-              </Text>
-            </View>
-          )}
-        </View>
-
-        <View style={styles.section}>
-          <View style={styles.tabContainer}>
-            <TouchableOpacity 
-              style={[styles.tab, activeTab === 'Available' && styles.activeTab]}
-              onPress={() => setActiveTab('Available')}
-            >
-              <Text 
-                style={[
-                  styles.tabText, 
-                  activeTab === 'Available' && styles.activeTabText
-                ]}
-              >
-                Available
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.tab, activeTab === 'Complete' && styles.activeTab]}
-              onPress={() => setActiveTab('Complete')}
-            >
-              <Text 
-                style={[
-                  styles.tabText, 
-                  activeTab === 'Complete' && styles.activeTabText
-                ]}
-              >
-                Complete
-              </Text>
-            </TouchableOpacity>
-          </View>
-          
-          {filteredChallenges().map(challenge => (
-            <ChallengeCard 
-              key={challenge.id} 
-              challenge={challenge} 
-              onJoin={() => handleJoinChallenge(challenge.id)}
-            />
-          ))}
-          
-          {filteredChallenges().length === 0 && (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>
-                {activeTab === 'Available' 
-                  ? "No available challenges found. Check back later for new challenges!"
-                  : "You haven't completed any challenges yet. Join a challenge to get started!"}
-              </Text>
-            </View>
-          )}
-        </View>
-
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Upcoming Challenges</Text>
-            <TouchableOpacity onPress={handleViewCalendar}>
-              <View style={styles.calendarButton}>
-                <Calendar size={16} color={Colors.primary} />
-                <Text style={styles.viewCalendarText}>View calendar</Text>
-              </View>
-            </TouchableOpacity>
-          </View>
-          
-          <View style={styles.upcomingContainer}>
-            <View style={styles.dateBox}>
-              <Text style={styles.monthText}>Jun</Text>
-              <Text style={styles.dayText}>15</Text>
-            </View>
-            <View style={styles.upcomingContent}>
-              <Text style={styles.upcomingTitle}>Plastic Free Challenge</Text>
-              <Text style={styles.upcomingDescription}>
-                Avoid all single-use plastics for 21 days
-              </Text>
-              <View style={styles.upcomingDetails}>
-                <Text style={styles.upcomingDetailText}>21 days</Text>
-                <Text style={styles.upcomingDetailText}>45 signed up</Text>
-              </View>
-              <TouchableOpacity style={styles.notifyButton} onPress={handleGetNotified}>
-                <Text style={styles.notifyButtonText}>Get Notified</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <TouchableOpacity 
-            style={styles.leaderboardButton}
-            onPress={() => router.push('/challenges/leaderboard')}
-          >
-            <Text style={styles.leaderboardButtonText}>View Challenge Leaderboard</Text>
+    <ScrollView style={styles.container}>
+      {pointsSection}
+      <View style={styles.tabRow}>
+        <TouchableOpacity style={[styles.tab, tab === 'available' && styles.activeTab]} onPress={() => setTab('available')}>
+          <Text style={[styles.tabText, tab === 'available' && styles.activeTabText]}>Available Challenges</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.tab, tab === 'my' && styles.activeTab]} onPress={() => setTab('my')}>
+          <Text style={[styles.tabText, tab === 'my' && styles.activeTabText]}>My Challenges</Text>
+        </TouchableOpacity>
+        {isAdmin && (
+          <TouchableOpacity style={[styles.tab, tab === 'admin' && styles.activeTab]} onPress={() => setTab('admin')}>
+            <Text style={[styles.tabText, tab === 'admin' && styles.activeTabText]}>Admin</Text>
           </TouchableOpacity>
-        </View>
-      </ScrollView>
-    </View>
+        )}
+      </View>
+      {loading && <Text style={styles.loading}>Loading...</Text>}
+      {!loading && selected ? (
+        <ChallengeDetails challenge={selected} />
+      ) : !loading && tab === 'available' ? (
+        available.length === 0 ? <Text style={styles.empty}>No available challenges.</Text> :
+        available.map(challenge => <ChallengeCard key={challenge._id} challenge={challenge} />)
+      ) : !loading && tab === 'my' ? (
+        myChallenges.length === 0 ? <Text style={styles.empty}>You have not joined any challenges yet.</Text> :
+        myChallenges.map(challenge => <ChallengeCard key={challenge._id} challenge={challenge} joined />)
+      ) : (
+        // Admin tab (only visible to admin)
+        isAdmin && (
+          <View style={{ padding: 16 }}>
+            <Text style={styles.title}>Create Challenge</Text>
+            <View style={{ marginBottom: 16 }}>
+              <Text style={styles.info}>Name</Text>
+              <TextInput
+                style={styles.input}
+                value={createForm.name}
+                onChangeText={t => setCreateForm(f => ({ ...f, name: t }))}
+                placeholder="Challenge name"
+              />
+              <Text style={styles.info}>Description</Text>
+              <TextInput
+                style={styles.input}
+                value={createForm.description}
+                onChangeText={t => setCreateForm(f => ({ ...f, description: t }))}
+                placeholder="Description"
+              />
+              <Text style={styles.info}>Goal Points</Text>
+              <TextInput
+                style={styles.input}
+                value={createForm.goalPoints}
+                onChangeText={t => setCreateForm(f => ({ ...f, goalPoints: t }))}
+                placeholder="Points to win"
+                keyboardType="numeric"
+              />
+              <Text style={styles.info}>Start Date</Text>
+              <TextInput
+                style={styles.input}
+                value={createForm.startDate}
+                onChangeText={t => setCreateForm(f => ({ ...f, startDate: t }))}
+                placeholder="YYYY-MM-DD"
+              />
+              <Text style={styles.info}>End Date</Text>
+              <TextInput
+                style={styles.input}
+                value={createForm.endDate}
+                onChangeText={t => setCreateForm(f => ({ ...f, endDate: t }))}
+                placeholder="YYYY-MM-DD"
+              />
+              {createError ? <Text style={{ color: 'red', marginTop: 4 }}>{createError}</Text> : null}
+              <Button title="Create Challenge" onPress={createChallenge} style={{ marginTop: 8 }} />
+            </View>
+            <Text style={styles.title}>All Challenges</Text>
+            {allChallenges.length === 0 ? <Text style={styles.empty}>No challenges found.</Text> :
+              allChallenges.map(challenge => <AdminChallengeCard key={challenge._id} challenge={challenge} />)}
+          </View>
+        )
+      )}
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.white,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  header: {
-    padding: 16,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: Colors.text,
-    marginBottom: 16,
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  searchInputContainer: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.white,
+  container: { flex: 1, backgroundColor: '#fff' },
+  tabRow: { flexDirection: 'row', margin: 16, borderRadius: 8, overflow: 'hidden' },
+  tab: { flex: 1, padding: 12, backgroundColor: '#eee', alignItems: 'center' },
+  activeTab: { backgroundColor: '#4CAF50' },
+  tabText: { color: '#333', fontWeight: '500' },
+  activeTabText: { color: '#fff' },
+  card: { backgroundColor: '#f9f9f9', margin: 12, padding: 16, borderRadius: 8, elevation: 2 },
+  title: { fontSize: 18, fontWeight: 'bold', marginBottom: 4 },
+  desc: { fontSize: 14, color: '#555', marginBottom: 8 },
+  info: { fontSize: 13, color: '#888', marginBottom: 2 },
+  loading: { textAlign: 'center', margin: 16 },
+  empty: { textAlign: 'center', margin: 24, color: '#aaa' },
+  detailsContainer: { margin: 16, padding: 16, backgroundColor: '#f4f4f4', borderRadius: 8 },
+  leaderboard: { marginTop: 16, backgroundColor: '#fff', borderRadius: 8, padding: 12 },
+  leaderboardTitle: { fontWeight: 'bold', marginBottom: 8 },
+  leaderboardEntry: { fontSize: 14, marginBottom: 4 },
+  input: {
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: '#ccc',
     borderRadius: 8,
-    paddingHorizontal: 12,
-    marginRight: 8,
-  },
-  searchIcon: {
-    marginRight: 8,
-  },
-  searchInput: {
-    flex: 1,
-    height: 40,
-    color: Colors.text,
-  },
-  filterButton: {
-    width: 40,
-    height: 40,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  section: {
-    padding: 16,
-    paddingTop: 0,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: Colors.text,
-    marginBottom: 12,
-  },
-  calendarButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  viewCalendarText: {
-    color: Colors.primary,
-    fontWeight: '500',
-    marginLeft: 4,
-  },
-  tabContainer: {
-    flexDirection: 'row',
-    backgroundColor: Colors.backgroundLight,
-    borderRadius: 8,
-    marginBottom: 16,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  activeTab: {
-    backgroundColor: Colors.white,
-    borderRadius: 8,
-  },
-  tabText: {
-    color: Colors.textLight,
-    fontWeight: '500',
-  },
-  activeTabText: {
-    color: Colors.primary,
-  },
-  emptyState: {
-    padding: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Colors.backgroundLight,
-    borderRadius: 8,
-  },
-  emptyStateText: {
-    textAlign: 'center',
-    color: Colors.textLight,
-    lineHeight: 20,
-  },
-  upcomingContainer: {
-    flexDirection: 'row',
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  dateBox: {
-    width: 60,
-    backgroundColor: Colors.backgroundLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 12,
-  },
-  monthText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: Colors.textLight,
-  },
-  dayText: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: Colors.primary,
-  },
-  upcomingContent: {
-    flex: 1,
-    padding: 16,
-  },
-  upcomingTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.text,
-    marginBottom: 4,
-  },
-  upcomingDescription: {
-    fontSize: 14,
-    color: Colors.textLight,
+    padding: 10,
     marginBottom: 8,
-  },
-  upcomingDetails: {
-    flexDirection: 'row',
-    marginBottom: 12,
-  },
-  upcomingDetailText: {
-    fontSize: 12,
-    color: Colors.textLight,
-    marginRight: 16,
-  },
-  notifyButton: {
-    alignSelf: 'stretch',
-    paddingVertical: 10,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 8,
-  },
-  notifyButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: Colors.text,
-  },
-  leaderboardButton: {
-    backgroundColor: Colors.primary,
-    paddingVertical: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  leaderboardButtonText: {
-    color: Colors.white,
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 15,
+    backgroundColor: '#fff',
   },
 });
+

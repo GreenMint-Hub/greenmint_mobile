@@ -1,32 +1,270 @@
-import React, { useState } from 'react';
-import { StyleSheet, Text, View, ScrollView, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import { useUserStore } from '@/store/userStore';
-import { useChallengeStore } from '@/store/challengeStore';
-import { useToast } from '@/hooks/useToast';
-import Colors from '@/constants/Colors';
+
 import Button from '@/components/Button';
-import Toast from '@/components/Toast';
-import { Bike, Bus, Recycle, Lightbulb, Leaf, ShoppingBag, Camera, Upload } from 'lucide-react-native';
+import Colors from '@/constants/Colors';
+import { API_CONFIG } from '@/constants/api';
+import { useChallengeStore } from '@/store/challengeStore';
+import { useUserStore } from '@/store/userStore';
 import { EcoActivity } from '@/types';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Pedometer } from 'expo-sensors';
+import * as Location from 'expo-location';
+import * as ImagePicker from 'expo-image-picker';
+import { Bike, Bus, Leaf, Lightbulb, Recycle, ShoppingBag } from 'lucide-react-native';
+import React, { useState, useEffect } from 'react';
+import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+
+const allowedTypes = [
+  'walking',
+  'cycling',
+  'publicTransport',
+  'recycling',
+  'energySaving',
+  'plantBasedMeal',
+  'secondHandPurchase',
+] as const;
+type EcoType = typeof allowedTypes[number];
+function mapParamToEcoType(param: string | undefined): EcoType {
+  switch (param) {
+    case 'walking':
+      return 'walking';
+    case 'cycling':
+      return 'cycling';
+    case 'public-transport':
+      return 'publicTransport';
+    case 'recycling':
+      return 'recycling';
+    case 'energy-saving':
+      return 'energySaving';
+    case 'plant-meal':
+    case 'plant-based-meal': // Support both variants
+      return 'plantBasedMeal';
+    case 'secondhand':
+      return 'secondHandPurchase';
+    default:
+      return 'cycling';
+  }
+}
+function haversineDistance(coord1: { latitude: number; longitude: number }, coord2: { latitude: number; longitude: number }) {
+  const toRad = (x: number) => (x * Math.PI) / 180;
+  const R = 6371e3; // meters
+  const dLat = toRad(coord2.latitude - coord1.latitude);
+  const dLon = toRad(coord2.longitude - coord1.longitude);
+  const lat1 = toRad(coord1.latitude);
+  const lat2 = toRad(coord2.latitude);
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
 
 export default function LogActivityScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const challengeId = params.challengeId as string;
   
-  const { addActivity } = useUserStore();
+  const { addActivity, claimReward } = useUserStore();
   const { updateProgress } = useChallengeStore();
-  const { toast, showToast, hideToast } = useToast();
   
-  const [selectedType, setSelectedType] = useState<EcoActivity['type']>('cycling');
+  const ecoActionType = mapParamToEcoType(typeof params.type === 'string' ? params.type : undefined);
+  const [actionType, setActionType] = useState<EcoType>(ecoActionType);
   const [description, setDescription] = useState('');
   const [co2Saved, setCo2Saved] = useState('');
-  const [evidence, setEvidence] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [sessionActive, setSessionActive] = useState(false);
+  const [steps, setSteps] = useState(0);
+  const [distance, setDistance] = useState(0);
+  const [points, setPoints] = useState(0);
+  const [locationSub, setLocationSub] = useState<any>(null);
+  const [lastLocation, setLastLocation] = useState<any>(null);
+  const [sessionStartTime, setSessionStartTime] = useState<number | null>(null);
+  const [sessionDuration, setSessionDuration] = useState(0);
+  const [sessionInterval, setSessionInterval] = useState<any>(null);
+  const { token } = useUserStore();
+  const [sensorError, setSensorError] = useState<string | null>(null);
+  const [debugLog, setDebugLog] = useState<string[]>([]);
+  const [media, setMedia] = useState<any>(null);
+  const [uploading, setUploading] = useState(false);
+
+  // Check sensor availability on mount
+  useEffect(() => {
+    if (actionType === 'walking') {
+      Pedometer.isAvailableAsync().then((available) => {
+        if (!available) setSensorError('Step counter not supported on this device.');
+      });
+    }
+    if (actionType === 'cycling') {
+      Location.hasServicesEnabledAsync().then((enabled) => {
+        if (!enabled) setSensorError('Location services are not enabled.');
+      });
+    }
+  }, [actionType]);
+
+  // Live tracking for walking/cycling with permission checks and debug
+  useEffect(() => {
+    let pedometerSub: any;
+    let locationPermissionGranted = false;
+    let pedometerPermissionGranted = false;
+    if (sessionActive && actionType === 'cycling') {
+      (async () => {
+        let { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          setSensorError('Location permission denied. Please enable location.');
+          return;
+        }
+        locationPermissionGranted = true;
+        setSensorError(null);
+        const sub = await Location.watchPositionAsync(
+          { accuracy: Location.Accuracy.Highest, distanceInterval: 5 },
+          (loc) => {
+            setDebugLog((log) => [
+              `Location event: lat=${loc.coords.latitude}, lon=${loc.coords.longitude}, time=${new Date(loc.timestamp).toLocaleTimeString()}`,
+              ...log.slice(0, 9)
+            ]);
+            if (lastLocation) {
+              const dx = haversineDistance(
+                { latitude: lastLocation.coords.latitude, longitude: lastLocation.coords.longitude },
+                { latitude: loc.coords.latitude, longitude: loc.coords.longitude }
+              );
+              setDistance((d) => d + dx);
+              if (Math.floor((distance + dx) / 20) > Math.floor(distance / 20)) {
+                setPoints((p) => p + 3);
+              }
+            }
+            setLastLocation(loc);
+          }
+        );
+        setLocationSub(sub);
+      })();
+    } else if (sessionActive && actionType === 'walking') {
+      (async () => {
+        const { status } = await Pedometer.requestPermissionsAsync();
+        if (status !== 'granted') {
+          setSensorError('Motion/fitness permission denied. Please enable permissions.');
+          return;
+        }
+        pedometerPermissionGranted = true;
+        setSensorError(null);
+        pedometerSub = Pedometer.watchStepCount(({ steps }: { steps: number }) => {
+          setDebugLog((log) => [
+            `Step event: steps=${steps}, time=${new Date().toLocaleTimeString()}`,
+            ...log.slice(0, 9)
+          ]);
+          setSteps((prev) => prev + steps);
+          if (Math.floor((steps + steps) / 15) > Math.floor(steps / 15)) {
+            setPoints((p) => p + 3);
+          }
+        });
+      })();
+    }
+    return () => {
+      if (pedometerSub) pedometerSub.remove();
+      if (locationSub) locationSub.remove();
+    };
+  }, [sessionActive, actionType]);
+
+  // Timer effect
+  useEffect(() => {
+    if (sessionActive) {
+      setSessionStartTime(Date.now());
+      const interval = setInterval(() => {
+        setSessionDuration(Math.floor((Date.now() - (sessionStartTime || Date.now())) / 1000));
+      }, 1000);
+      setSessionInterval(interval);
+    } else {
+      if (sessionInterval) clearInterval(sessionInterval);
+      setSessionDuration(0);
+      setSessionStartTime(null);
+    }
+    return () => {
+      if (sessionInterval) clearInterval(sessionInterval);
+    };
+  }, [sessionActive]);
+
+  const startSession = () => {
+    setSessionActive(true);
+    setSteps(0);
+    setDistance(0);
+    setPoints(0);
+    setLastLocation(null);
+  };
+  const stopSession = async () => {
+    setSessionActive(false);
+    if (locationSub) locationSub.remove();
+    if (sessionInterval) clearInterval(sessionInterval);
+    // Send session data to backend
+    try {
+      const payload = {
+        type: actionType,
+        steps,
+        distance,
+        points,
+        duration: sessionDuration,
+        startTime: sessionStartTime ? new Date(sessionStartTime).toISOString() : undefined,
+        endTime: new Date().toISOString(),
+      };
+      await fetch(`${API_CONFIG.API_URL}/activity/log`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+      Alert.alert('Session Ended', `You earned ${points} points!`);
+      setSteps(0);
+      setDistance(0);
+      setPoints(0);
+      setSessionDuration(0);
+      setSessionStartTime(null);
+    } catch (e) {
+      Alert.alert('Error', 'Failed to log session.');
+    }
+  };
+
+  const pickMedia = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: 'images',
+      allowsEditing: true,
+      quality: 0.7,
+    });
+    if (!result.canceled && result.assets && result.assets.length > 0) {
+      setMedia(result.assets[0]);
+    }
+  };
+
+  const handleMediaSubmit = async () => {
+    if (!media) {
+      Alert.alert('Please select an image.');
+      return;
+    }
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', {
+        uri: media.uri,
+        name: media.fileName || 'upload.jpg',
+        type: media.type || 'image/jpeg',
+      } as any);
+      formData.append('actionType', actionType);
+      formData.append('description', description);
+      await fetch(`${API_CONFIG.API_URL}/activity/media`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+      Alert.alert('Submitted!', 'Your action has been published for community voting.');
+      setMedia(null);
+      setDescription('');
+    } catch (e) {
+      Alert.alert('Error', 'Failed to upload action.');
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const getActivityTitle = () => {
-    switch (selectedType) {
+    switch (actionType) {
       case 'cycling':
         return 'Cycled to work/school';
       case 'publicTransport':
@@ -50,54 +288,14 @@ export default function LogActivityScreen() {
     return Math.round(co2Value * 10);
   };
 
-  const handleUploadEvidence = () => {
-    Alert.alert(
-      'Upload Evidence',
-      'Choose evidence type',
-      [
-        { text: 'Take Photo', onPress: () => handleCameraCapture() },
-        { text: 'Record Video', onPress: () => handleVideoCapture() },
-        { text: 'Choose from Gallery', onPress: () => handleGalleryPick() },
-        { text: 'Cancel', style: 'cancel' },
-      ]
-    );
-  };
-
-  const handleCameraCapture = () => {
-    // In a real app, this would open the camera
-    const newEvidence = `photo_${Date.now()}.jpg`;
-    setEvidence([...evidence, newEvidence]);
-    showToast('Photo captured successfully', 'success');
-  };
-
-  const handleVideoCapture = () => {
-    // In a real app, this would open the video recorder
-    const newEvidence = `video_${Date.now()}.mp4`;
-    setEvidence([...evidence, newEvidence]);
-    showToast('Video recorded successfully', 'success');
-  };
-
-  const handleGalleryPick = () => {
-    // In a real app, this would open the gallery
-    const newEvidence = `gallery_${Date.now()}.jpg`;
-    setEvidence([...evidence, newEvidence]);
-    showToast('Image selected from gallery', 'success');
-  };
-
-  const removeEvidence = (index: number) => {
-    const newEvidence = evidence.filter((_, i) => i !== index);
-    setEvidence(newEvidence);
-    showToast('Evidence removed', 'info');
-  };
-
   const handleSubmit = async () => {
     if (!description) {
-      showToast('Please provide a description of your activity', 'error');
+      Alert.alert('Missing Information', 'Please provide a description of your activity.');
       return;
     }
 
     if (!co2Saved || isNaN(parseFloat(co2Saved))) {
-      showToast('Please enter a valid CO₂ saved amount', 'error');
+      Alert.alert('Invalid CO2 Value', 'Please enter a valid CO2 saved amount.');
       return;
     }
 
@@ -105,12 +303,12 @@ export default function LogActivityScreen() {
     
     try {
       const newActivity = {
-        type: selectedType,
+        type: actionType,
         title: getActivityTitle(),
         description,
         co2Saved: parseFloat(co2Saved),
         points: getPoints(),
-        verified: evidence.length > 0, // Auto-verify if evidence is provided
+        verified: false,
         date: new Date().toISOString(),
       };
       
@@ -119,269 +317,96 @@ export default function LogActivityScreen() {
       // If this activity is for a challenge, update the challenge progress
       if (challengeId) {
         await updateProgress(challengeId, 10); // Increase progress by 10%
-        showToast('Challenge progress updated!', 'success');
       }
-      
-      showToast(`Activity logged! You earned ${getPoints()} points.`, 'success');
-      
-      setTimeout(() => {
-        router.back();
-      }, 2000);
+
+      // Show option to claim blockchain reward
+      Alert.alert(
+        'Activity Logged Successfully!',
+        `You earned ${getPoints()} points. Would you like to claim a blockchain reward?`,
+        [
+          { text: 'Skip', onPress: () => router.back() },
+          { 
+            text: 'Claim Reward', 
+            onPress: async () => {
+              try {
+                await claimReward(getPoints());
+                Alert.alert('Reward Claimed!', 'Your blockchain reward has been claimed successfully.');
+              } catch (error) {
+                Alert.alert('Error', 'Failed to claim reward. Please try again later.');
+              }
+              router.back();
+            }
+          }
+        ]
+      );
     } catch (error) {
-      showToast('Failed to log activity. Please try again.', 'error');
+      Alert.alert('Error', 'Failed to log activity. Please try again.');
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <KeyboardAvoidingView 
-      style={styles.container} 
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <Toast 
-        message={toast.message}
-        type={toast.type}
-        visible={toast.visible}
-        onHide={hideToast}
-      />
-      
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Log Eco Action</Text>
-          <Text style={styles.subtitle}>
-            Track your eco-friendly activities and earn points
-          </Text>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Activity Type</Text>
-          <View style={styles.activityTypesContainer}>
-            <TouchableOpacity 
-              style={[
-                styles.activityTypeItem,
-                selectedType === 'cycling' && styles.selectedActivityType
-              ]}
-              onPress={() => setSelectedType('cycling')}
-            >
-              <View style={styles.activityTypeIcon}>
-                <Bike 
-                  size={24} 
-                  color={selectedType === 'cycling' ? Colors.white : Colors.primary} 
-                />
-              </View>
-              <Text 
-                style={[
-                  styles.activityTypeText,
-                  selectedType === 'cycling' && styles.selectedActivityTypeText
-                ]}
-              >
-                Cycling
-              </Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[
-                styles.activityTypeItem,
-                selectedType === 'publicTransport' && styles.selectedActivityType
-              ]}
-              onPress={() => setSelectedType('publicTransport')}
-            >
-              <View style={styles.activityTypeIcon}>
-                <Bus 
-                  size={24} 
-                  color={selectedType === 'publicTransport' ? Colors.white : Colors.primary} 
-                />
-              </View>
-              <Text 
-                style={[
-                  styles.activityTypeText,
-                  selectedType === 'publicTransport' && styles.selectedActivityTypeText
-                ]}
-              >
-                Public Transport
-              </Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[
-                styles.activityTypeItem,
-                selectedType === 'recycling' && styles.selectedActivityType
-              ]}
-              onPress={() => setSelectedType('recycling')}
-            >
-              <View style={styles.activityTypeIcon}>
-                <Recycle 
-                  size={24} 
-                  color={selectedType === 'recycling' ? Colors.white : Colors.primary} 
-                />
-              </View>
-              <Text 
-                style={[
-                  styles.activityTypeText,
-                  selectedType === 'recycling' && styles.selectedActivityTypeText
-                ]}
-              >
-                Recycling
-              </Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[
-                styles.activityTypeItem,
-                selectedType === 'energySaving' && styles.selectedActivityType
-              ]}
-              onPress={() => setSelectedType('energySaving')}
-            >
-              <View style={styles.activityTypeIcon}>
-                <Lightbulb 
-                  size={24} 
-                  color={selectedType === 'energySaving' ? Colors.white : Colors.primary} 
-                />
-              </View>
-              <Text 
-                style={[
-                  styles.activityTypeText,
-                  selectedType === 'energySaving' && styles.selectedActivityTypeText
-                ]}
-              >
-                Energy Saving
-              </Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[
-                styles.activityTypeItem,
-                selectedType === 'plantBasedMeal' && styles.selectedActivityType
-              ]}
-              onPress={() => setSelectedType('plantBasedMeal')}
-            >
-              <View style={styles.activityTypeIcon}>
-                <Leaf 
-                  size={24} 
-                  color={selectedType === 'plantBasedMeal' ? Colors.white : Colors.primary} 
-                />
-              </View>
-              <Text 
-                style={[
-                  styles.activityTypeText,
-                  selectedType === 'plantBasedMeal' && styles.selectedActivityTypeText
-                ]}
-              >
-                Plant Based Meal
-              </Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[
-                styles.activityTypeItem,
-                selectedType === 'secondHandPurchase' && styles.selectedActivityType
-              ]}
-              onPress={() => setSelectedType('secondHandPurchase')}
-            >
-              <View style={styles.activityTypeIcon}>
-                <ShoppingBag 
-                  size={24} 
-                  color={selectedType === 'secondHandPurchase' ? Colors.white : Colors.primary} 
-                />
-              </View>
-              <Text 
-                style={[
-                  styles.activityTypeText,
-                  selectedType === 'secondHandPurchase' && styles.selectedActivityTypeText
-                ]}
-              >
-                Second-hand Purchase
-              </Text>
-            </TouchableOpacity>
+    <ScrollView contentContainerStyle={styles.container}>
+      <View>
+        <Text style={styles.title}>Log Eco Action: {actionType.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</Text>
+        {sensorError && <Text style={{ color: 'red', marginVertical: 12 }}>{sensorError}</Text>}
+        {(actionType === 'walking' || actionType === 'cycling') ? (
+          <View style={{ marginVertical: 24, alignItems: 'center' }}>
+            {sessionActive ? (
+              <>
+                <Text style={styles.label}>Session In Progress</Text>
+                <Text style={styles.label}>Time: {Math.floor(sessionDuration / 60)}:{(sessionDuration % 60).toString().padStart(2, '0')}</Text>
+                {actionType === 'walking' && <Text style={styles.label}>Steps: {steps}</Text>}
+                {actionType === 'cycling' && <Text style={styles.label}>Distance: {distance.toFixed(1)} meters</Text>}
+                <Text style={styles.label}>Points: {points}</Text>
+                <Button title="Stop Session" variant="primary" onPress={stopSession} style={{ marginTop: 16 }} />
+                <View style={{ marginTop: 16, alignItems: 'flex-start', width: '100%' }}>
+                  <Text style={{ fontSize: 12, color: Colors.textLight, marginBottom: 4 }}>Debug Log:</Text>
+                  {debugLog.map((msg, i) => (
+                    <Text key={i} style={{ fontSize: 12, color: Colors.textLight }}>{msg}</Text>
+                  ))}
+                </View>
+              </>
+            ) : (
+              <Button title="Start Session" variant="primary" onPress={startSession} />
+            )}
           </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Activity Details</Text>
-          
-          <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Description</Text>
+        ) : (actionType === 'publicTransport' || actionType === 'plantBasedMeal') ? (
+          <View style={{ marginVertical: 24 }}>
+            <Button
+              title={media ? 'Change Image' : 'Pick Image'}
+              variant="outline"
+              onPress={pickMedia}
+              style={{ marginBottom: 12 }}
+            />
+            {media && (
+              <Text style={{ fontSize: 14, color: Colors.textLight, marginBottom: 8 }}>Selected: {media.fileName || media.uri}</Text>
+            )}
             <TextInput
               style={styles.textInput}
-              placeholder="Describe your activity"
+              placeholder="Describe your action..."
               value={description}
               onChangeText={setDescription}
               multiline
               numberOfLines={3}
               placeholderTextColor={Colors.textLight}
             />
-          </View>
-          
-          <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>CO₂ Saved (kg)</Text>
-            <TextInput
-              style={styles.textInput}
-              placeholder="Enter estimated CO₂ saved"
-              value={co2Saved}
-              onChangeText={setCo2Saved}
-              keyboardType="numeric"
-              placeholderTextColor={Colors.textLight}
+            <Button
+              title={uploading ? 'Submitting...' : 'Submit Action'}
+              variant="primary"
+              onPress={handleMediaSubmit}
+              disabled={uploading}
+              style={{ marginTop: 16 }}
             />
           </View>
-          
-          <View style={styles.pointsContainer}>
-            <Text style={styles.pointsLabel}>Points you'll earn:</Text>
-            <Text style={styles.pointsValue}>{getPoints()} points</Text>
+        ) : (
+          <View>
+            {/* Existing manual log form here */}
           </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Upload Evidence (Optional)</Text>
-          <Text style={styles.sectionDescription}>
-            Upload photos or videos to verify your activity and get instant verification
-          </Text>
-          
-          <TouchableOpacity 
-            style={styles.uploadButton}
-            onPress={handleUploadEvidence}
-          >
-            <Upload size={20} color={Colors.primary} />
-            <Text style={styles.uploadButtonText}>Add Photo or Video</Text>
-          </TouchableOpacity>
-          
-          {evidence.length > 0 && (
-            <View style={styles.evidenceContainer}>
-              <Text style={styles.evidenceTitle}>Uploaded Evidence:</Text>
-              {evidence.map((item, index) => (
-                <View key={index} style={styles.evidenceItem}>
-                  <Camera size={16} color={Colors.primary} />
-                  <Text style={styles.evidenceText}>{item}</Text>
-                  <TouchableOpacity 
-                    onPress={() => removeEvidence(index)}
-                    style={styles.removeButton}
-                  >
-                    <Text style={styles.removeButtonText}>Remove</Text>
-                  </TouchableOpacity>
-                </View>
-              ))}
-            </View>
-          )}
-        </View>
-
-        <View style={styles.buttonContainer}>
-          <Button 
-            title="Submit Activity" 
-            variant="primary" 
-            onPress={handleSubmit}
-            loading={isLoading}
-            disabled={isLoading}
-          />
-          <Button 
-            title="Cancel" 
-            variant="outline" 
-            onPress={() => router.back()}
-            style={styles.cancelButton}
-            disabled={isLoading}
-          />
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        )}
+      </View>
+    </ScrollView>
   );
 }
 
@@ -389,9 +414,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.white,
-  },
-  scrollView: {
-    flex: 1,
   },
   header: {
     padding: 16,
@@ -416,12 +438,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.text,
     marginBottom: 16,
-  },
-  sectionDescription: {
-    fontSize: 14,
-    color: Colors.textLight,
-    marginBottom: 16,
-    lineHeight: 20,
   },
   activityTypesContainer: {
     flexDirection: 'row',
@@ -468,14 +484,14 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   textInput: {
+    width: '100%',
     backgroundColor: Colors.white,
-    borderWidth: 1,
-    borderColor: Colors.border,
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
-    color: Colors.text,
-    textAlignVertical: 'top',
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   pointsContainer: {
     flexDirection: 'row',
@@ -495,58 +511,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.primary,
   },
-  uploadButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Colors.backgroundLight,
-    borderWidth: 2,
-    borderColor: Colors.primary,
-    borderStyle: 'dashed',
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 16,
-  },
-  uploadButtonText: {
-    fontSize: 16,
-    color: Colors.primary,
-    fontWeight: '500',
-    marginLeft: 8,
-  },
-  evidenceContainer: {
-    backgroundColor: Colors.backgroundLight,
-    borderRadius: 8,
-    padding: 12,
-  },
-  evidenceTitle: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: Colors.text,
-    marginBottom: 8,
-  },
-  evidenceItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.white,
-    borderRadius: 6,
-    padding: 8,
-    marginBottom: 4,
-  },
-  evidenceText: {
-    flex: 1,
-    fontSize: 14,
-    color: Colors.text,
-    marginLeft: 8,
-  },
-  removeButton: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  removeButtonText: {
-    fontSize: 12,
-    color: Colors.error,
-    fontWeight: '500',
-  },
   buttonContainer: {
     padding: 16,
     paddingBottom: 32,
@@ -554,4 +518,11 @@ const styles = StyleSheet.create({
   cancelButton: {
     marginTop: 12,
   },
+  label: {
+    fontSize: 18,
+    fontWeight: '500',
+    color: Colors.text,
+    marginBottom: 8,
+  },
 });
+

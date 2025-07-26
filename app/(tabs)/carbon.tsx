@@ -1,27 +1,59 @@
-import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity } from 'react-native';
-import { useRouter } from 'expo-router';
-import { useUserStore } from '@/store/userStore';
-import Colors from '@/constants/Colors';
-import Card from '@/components/Card';
 import ActivityCard from '@/components/ActivityCard';
-import ProgressBar from '@/components/ProgressBar';
 import Button from '@/components/Button';
-import StatisticsComponent from '@/components/StatisticsComponent';
-import { ChevronDown } from 'lucide-react-native';
+import Card from '@/components/Card';
+import ProgressBar from '@/components/ProgressBar';
+import Colors from '@/constants/Colors';
+import { useUserStore } from '@/store/userStore';
+import { useRouter } from 'expo-router';
+import { Bike, Bus, Leaf, ShoppingBag, Footprints } from 'lucide-react-native';
+import React, { useEffect, useState } from 'react';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import axios from 'axios';
+import { API_CONFIG } from '@/constants/api';
 
 export default function CarbonScreen() {
   const router = useRouter();
   const { user, loadUserData } = useUserStore();
   const [timeframe, setTimeframe] = useState('This Week');
   const [activeTab, setActiveTab] = useState('Activities');
+  const [feedTab, setFeedTab] = useState<'my' | 'community'>('my');
+  const [myActions, setMyActions] = useState<any[]>([]);
+  const [communityActions, setCommunityActions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadUserData();
   }, []);
 
+  useEffect(() => {
+    if (feedTab === 'my') {
+      setLoading(true);
+      axios.get(`${API_CONFIG.API_URL}/activity/user`, {
+        headers: { Authorization: `Bearer ${useUserStore.getState().token}` },
+      })
+        .then(res => setMyActions(res.data))
+        .catch(err => setError('Failed to load activities'))
+        .finally(() => setLoading(false));
+    } else if (feedTab === 'community') {
+      setLoading(true);
+      axios.get(`${API_CONFIG.API_URL}/activity/community`, {
+        headers: { Authorization: `Bearer ${useUserStore.getState().token}` },
+      })
+        .then(res => setCommunityActions(res.data))
+        .catch(err => setError('Failed to load community actions'))
+        .finally(() => setLoading(false));
+    }
+  }, [feedTab]);
+
   const navigateToLogActivity = () => {
     router.push('/activity/log');
+  };
+  const navigateToUploadMedia = () => {
+    router.push('/activity/upload-media');
+  };
+  const navigateToVote = () => {
+    router.push('/activity/vote');
   };
 
   if (!user) {
@@ -32,22 +64,33 @@ export default function CarbonScreen() {
     );
   }
 
+  const ECO_ACTIONS = [
+    { label: 'Walking', icon: Footprints, route: '/activity/log' },
+    { label: 'Cycling', icon: Bike, route: '/activity/log' },
+    { label: 'Public Transport', icon: Bus, route: '/activity/log' },
+    { label: 'Plant-Based Meal', icon: Leaf, route: '/activity/log' },
+    { label: 'Secondhand Purchase', icon: ShoppingBag, route: '/activity/log' },
+  ];
+
   return (
     <ScrollView style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Carbon Impact</Text>
+      </View>
+
       <Card style={styles.carbonCard}>
         <View style={styles.carbonHeader}>
           <View>
             <Text style={styles.carbonLabel}>Total CO₂ Saved</Text>
-            <Text style={styles.carbonValue}>{user.totalCO2Saved}kg</Text>
+            <Text style={styles.carbonValue}>{user.totalCO2Saved || 0}kg</Text>
           </View>
           <TouchableOpacity style={styles.timeframeSelector}>
             <Text style={styles.timeframeText}>{timeframe}</Text>
-            <ChevronDown size={16} color={Colors.text} />
           </TouchableOpacity>
         </View>
         
         <ProgressBar 
-          progress={user.totalCO2Saved} 
+          progress={user.totalCO2Saved || 0} 
           total={200} 
           color={Colors.primary}
           backgroundColor="rgba(76, 175, 80, 0.2)"
@@ -65,18 +108,58 @@ export default function CarbonScreen() {
           </View>
           <View style={styles.timeframeItem}>
             <Text style={styles.timeframeLabel}>Monthly</Text>
-            <Text style={styles.timeframeValue}>{user.totalCO2Saved}kg</Text>
+            <Text style={styles.timeframeValue}>{user.totalCO2Saved || 0}kg</Text>
           </View>
         </View>
       </Card>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Log Eco Action</Text>
-        <Button 
-          title="Log New Activity" 
-          variant="primary" 
-          onPress={navigateToLogActivity}
-        />
+        <Text style={styles.sectionTitle}>Eco Actions</Text>
+        <View style={styles.actionsGrid}>
+          {ECO_ACTIONS.map((action) => (
+            <TouchableOpacity
+              key={action.label}
+              style={styles.actionItem}
+              onPress={() => router.push({ pathname: '/activity/log', params: { type: action.label.toLowerCase().replace(/ /g, '-') } })}
+            >
+              <View style={styles.actionIcon}>
+                <action.icon size={24} color={Colors.primary} />
+              </View>
+              <Text style={styles.actionText}>{action.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <View style={styles.tabContainer}>
+          <TouchableOpacity
+            style={[styles.tab, feedTab === 'my' && styles.activeTab]}
+            onPress={() => setFeedTab('my')}
+          >
+            <Text style={[styles.tabText, feedTab === 'my' && styles.activeTabText]}>My Actions</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, feedTab === 'community' && styles.activeTab]}
+            onPress={() => setFeedTab('community')}
+          >
+            <Text style={[styles.tabText, feedTab === 'community' && styles.activeTabText]}>Community Actions</Text>
+          </TouchableOpacity>
+        </View>
+        {feedTab === 'my' ? (
+          loading ? <Text>Loading...</Text> :
+          error ? <Text style={{ color: 'red' }}>{error}</Text> :
+          myActions.length === 0 ? <Text style={{ color: Colors.textLight, marginTop: 16 }}>Your logged eco actions will appear here.</Text> :
+          myActions.map((activity) => (
+            <ActivityCard key={activity.id} activity={activity} />
+          ))
+        ) : (
+          loading ? <Text>Loading...</Text> :
+          communityActions.length === 0 ? <Text style={{ color: Colors.textLight, marginTop: 16 }}>No actions to vote on right now.</Text> :
+          communityActions.map((activity) => (
+            <ActivityCard key={activity.id} activity={activity} showVoteButton onVote={() => router.push({ pathname: '/activity/vote', params: { id: activity.id } })} />
+          ))
+        )}
       </View>
 
       <View style={styles.section}>
@@ -113,12 +196,54 @@ export default function CarbonScreen() {
         
         {activeTab === 'Activities' ? (
           <>
-            {user.activities.map((activity) => (
+            {user.activities?.map((activity) => (
               <ActivityCard key={activity.id} activity={activity} />
             ))}
           </>
         ) : (
-          <StatisticsComponent data={{ totalCO2Saved: user.totalCO2Saved, activities: user.activities }} />
+          <Card style={styles.statisticsCard}>
+            <Text style={styles.statisticsTitle}>Carbon Savings by Activity</Text>
+            
+            <View style={styles.statItem}>
+              <View style={styles.statLabel}>
+                <View style={[styles.statDot, { backgroundColor: Colors.primary }]} />
+                <Text style={styles.statText}>Recycling</Text>
+              </View>
+              <Text style={styles.statValue}>45kg CO₂</Text>
+            </View>
+            
+            <View style={styles.statItem}>
+              <View style={styles.statLabel}>
+                <View style={[styles.statDot, { backgroundColor: '#81C784' }]} />
+                <Text style={styles.statText}>Cycling</Text>
+              </View>
+              <Text style={styles.statValue}>32kg CO₂</Text>
+            </View>
+            
+            <View style={styles.statItem}>
+              <View style={styles.statLabel}>
+                <View style={[styles.statDot, { backgroundColor: '#AED581' }]} />
+                <Text style={styles.statText}>Public Transport</Text>
+              </View>
+              <Text style={styles.statValue}>28kg CO₂</Text>
+            </View>
+            
+            <View style={styles.statItem}>
+              <View style={styles.statLabel}>
+                <View style={[styles.statDot, { backgroundColor: '#C5E1A5' }]} />
+                <Text style={styles.statText}>Energy Saving</Text>
+              </View>
+              <Text style={styles.statValue}>15kg CO₂</Text>
+            </View>
+            
+            <View style={styles.statItem}>
+              <View style={styles.statLabel}>
+                <View style={[styles.statDot, { backgroundColor: '#E6EE9C' }]} />
+                <Text style={styles.statText}>Plant-based Meals</Text>
+              </View>
+              <Text style={styles.statValue}>5kg CO₂</Text>
+            </View>
+          </Card>
         )}
       </View>
     </ScrollView>
@@ -134,6 +259,15 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  header: {
+    padding: 16,
+    paddingBottom: 0,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: '600',
+    color: Colors.text,
   },
   carbonCard: {
     margin: 16,
@@ -228,5 +362,64 @@ const styles = StyleSheet.create({
   },
   activeTabText: {
     color: Colors.primary,
+  },
+  statisticsCard: {
+    padding: 16,
+  },
+  statisticsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.text,
+    marginBottom: 16,
+  },
+  statItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  statLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: 8,
+  },
+  statText: {
+    fontSize: 14,
+    color: Colors.text,
+  },
+  statValue: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: Colors.text,
+  },
+  actionsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-around',
+    marginBottom: 16,
+  },
+  actionItem: {
+    width: '45%', // Adjust as needed for two columns
+    alignItems: 'center',
+    marginVertical: 8,
+  },
+  actionIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(76, 175, 80, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  actionText: {
+    fontSize: 14,
+    color: Colors.text,
+    textAlign: 'center',
   },
 });

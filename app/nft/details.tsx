@@ -12,9 +12,11 @@ export default function NFTDetailsScreen() {
   const router = useRouter();
   const { user } = useUserStore();
 
+  // All hooks are above this line!
+
   if (!user) {
     return (
-      <View style={styles.loadingContainer}>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
         <Text>Loading...</Text>
       </View>
     );

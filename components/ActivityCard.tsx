@@ -5,12 +5,16 @@ import { Bike, Bus, Leaf, Lightbulb, Recycle, ShoppingBag } from 'lucide-react-n
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Card from './Card';
+import Button from './Button';
 
 interface ActivityCardProps {
   activity: EcoActivity;
+  showVoteButton?: boolean;
+  onVote?: (value: 'yes' | 'no') => void;
+  currentUserId?: string;
 }
 
-export default function ActivityCard({ activity }: ActivityCardProps) {
+export default function ActivityCard({ activity, showVoteButton, onVote, currentUserId }: ActivityCardProps) {
   const getIcon = () => {
     switch (activity.type) {
       case 'cycling':
@@ -30,6 +34,12 @@ export default function ActivityCard({ activity }: ActivityCardProps) {
     }
   };
 
+  // Count votes
+  const yesVotes = activity.votes?.filter(v => v.value === 'yes').length || 0;
+  const noVotes = activity.votes?.filter(v => v.value === 'no').length || 0;
+  // Check if current user has voted
+  const userVoted = !!activity.votes?.find(v => v.userId === currentUserId);
+
   return (
     <Card variant="outlined" style={styles.card}>
       <View style={styles.container}>
@@ -40,6 +50,12 @@ export default function ActivityCard({ activity }: ActivityCardProps) {
           <Text style={styles.title}>{activity.title}</Text>
           <View style={styles.detailsRow}>
             <Text style={styles.co2Text}>CO₂ saved: {activity.co2Saved}kg</Text>
+            {activity.status && (
+              <Text style={[styles.status, styles[activity.status]]}>{activity.status.charAt(0).toUpperCase() + activity.status.slice(1)}</Text>
+            )}
+            {activity.user?.name && (
+              <Text style={styles.userName}>by {activity.user.name}</Text>
+            )}
           </View>
         </View>
         <View style={styles.rightContent}>
@@ -47,6 +63,24 @@ export default function ActivityCard({ activity }: ActivityCardProps) {
           <Text style={styles.pointsText}>+{activity.points} points</Text>
         </View>
       </View>
+      {showVoteButton && (
+        <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8, alignItems: 'center' }}>
+          <Button
+            title={`Yes (${yesVotes})`}
+            variant="primary"
+            onPress={() => onVote && onVote('yes')}
+            style={{ marginRight: 8 }}
+            disabled={userVoted}
+          />
+          <Button
+            title={`No (${noVotes})`}
+            variant="outline"
+            onPress={() => onVote && onVote('no')}
+            disabled={userVoted}
+          />
+          {userVoted && <Text style={{ marginLeft: 8, color: Colors.textLight, fontSize: 12 }}>You voted</Text>}
+        </View>
+      )}
     </Card>
   );
 }
@@ -99,4 +133,11 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: Colors.primary,
   },
+  status: { marginLeft: 8, fontSize: 12 },
+  pending: { color: '#f39c12' },
+  verified: { color: '#27ae60' },
+  rejected: { color: '#e74c3c' },
+  voting: { color: '#2980b9' },
+  userName: { marginLeft: 8, fontSize: 12, color: Colors.textLight },
 });
+

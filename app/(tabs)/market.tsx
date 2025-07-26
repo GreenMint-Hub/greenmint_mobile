@@ -1,6 +1,8 @@
 
 import MarketplaceItem from '@/components/MarketplaceItem';
 import Colors from '@/constants/Colors';
+import { useMarketplaceStore } from '@/store/marketplaceStore';
+import { useUserStore } from '@/store/userStore';
 import { useRouter } from 'expo-router';
 import { Filter, Search, SlidersHorizontal } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
@@ -11,6 +13,8 @@ import { getMarketplaceListings } from '../../utils/contractHelpers';
 
 export default function MarketScreen() {
   const router = useRouter();
+  const { items, filteredItems, fetchItems, setSearchQuery } = useMarketplaceStore();
+  const { user } = useUserStore();
   const [activeTab, setActiveTab] = useState('Buy');
   const [localSearchQuery, setLocalSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
@@ -48,7 +52,7 @@ export default function MarketScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>GreenMint</Text>
         <View style={styles.pointsContainer}>
-          <Text style={styles.pointsText}>1,250 EcoPoints</Text>
+          <Text style={styles.pointsText}>{user?.ecoPoints || 0} EcoPoints</Text>
         </View>
       </View>
 
