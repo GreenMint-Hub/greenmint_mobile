@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Switch } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -329,3 +330,4 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
 });
+

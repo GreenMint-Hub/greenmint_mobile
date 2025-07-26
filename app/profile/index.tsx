@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+ import React, { useState } from 'react';
 import { StyleSheet, Text, View, ScrollView, Image, TextInput, TouchableOpacity, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useUserStore } from '@/store/userStore';
@@ -54,6 +55,8 @@ export default function ProfileScreen() {
         
         <View style={styles.headerInfo}>
           <Text style={styles.name}>{user.name}</Text>
+
+          <Text style={styles.name}>{(user as any).username || user.name || user.email}</Text>
           <Text style={styles.level}>Level {user.level} • {user.ecoPoints} EcoPoints</Text>
           <Text style={styles.joinDate}>
             Member since {new Date(user.joinDate).toLocaleDateString()}
@@ -80,11 +83,13 @@ export default function ProfileScreen() {
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
           <Text style={styles.statValue}>{user.activities.length}</Text>
+          <Text style={styles.statValue}>{(user.activities || []).length}</Text>
           <Text style={styles.statLabel}>Activities</Text>
         </View>
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
           <Text style={styles.statValue}>{user.nfts.length}</Text>
+          <Text style={styles.statValue}>{(user.nfts || []).length}</Text>
           <Text style={styles.statLabel}>NFTs Earned</Text>
         </View>
       </View>
@@ -107,7 +112,8 @@ export default function ProfileScreen() {
                   placeholder="Enter your name"
                 />
               ) : (
-                <Text style={styles.infoValue}>{user.name}</Text>
+            <Text style={styles.infoValue}>{user.name}</Text>
+   <Text style={styles.infoValue}>{(user as any).username || user.name || ''}</Text>
               )}
             </View>
           </View>

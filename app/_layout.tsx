@@ -1,19 +1,63 @@
+import Colors from "@/constants/Colors";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFonts } from "expo-font";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import { useEffect } from "react";
 import { StatusBar } from "expo-status-bar";
-import { View, ActivityIndicator } from "react-native";
-import Colors from "@/constants/Colors";
-import { OnboardingProvider, useOnboarding } from "@/store/onboardingStore";
+import { useEffect } from "react";
 import { useUserStore } from "@/store/userStore";
+import React from "react";
+import { OnboardingProvider } from '@/store/onboardingStore';
 
 export const unstable_settings = {
   initialRouteName: "(tabs)",
 };
 
+// Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
+
+function AuthGuard({ children }: { children: React.ReactNode }) {
+  const { user, token, clearStore } = useUserStore();
+  const router = useRouter();
+  const segments = useSegments();
+
+  useEffect(() => {
+    const inAuthFlow = segments[0] === "onboarding" || segments[0] === "(auth)";
+    const inMainApp = segments[0] === "(tabs)";
+    
+    // Check if user is authenticated
+    const isAuthenticated = user && token;
+    
+    console.log('AuthGuard Debug:', {
+      user: !!user,
+      token: !!token,
+      isAuthenticated,
+      segments: segments[0],
+      inAuthFlow,
+      inMainApp
+    });
+    
+    if (!isAuthenticated) {
+      // User is not authenticated
+      if (!inAuthFlow) {
+        // Not in auth flow, redirect to onboarding
+        console.log('Redirecting to onboarding - user not authenticated');
+        router.replace("/onboarding");
+      }
+      // If already in auth flow (onboarding or auth), let them stay there
+    } else {
+      // User is authenticated
+      if (inAuthFlow) {
+        // User is authenticated but in auth flow, redirect to main app
+        console.log('Redirecting to main app - user authenticated');
+        router.replace("/(tabs)");
+      }
+      // If already in main app, let them stay there
+    }
+  }, [user, token, segments]);
+
+  return <>{children}</>;
+}
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({
@@ -45,51 +89,8 @@ export default function RootLayout() {
 }
 
 function RootLayoutNav() {
-  const { isOnboardingCompleted, isLoading: onboardingLoading } = useOnboarding();
-  const { user } = useUserStore();
-  const router = useRouter();
-  const segments = useSegments();
-
-  useEffect(() => {
-    console.log('RootLayoutNav useEffect, isOnboardingCompleted:', isOnboardingCompleted, 'user:', user, 'segments:', segments);
-    if (onboardingLoading) return;
-
-    const inOnboarding = segments[0] === 'onboarding';
-    const inAuth = segments[0] === '(auth)';
-    const inTabs = segments[0] === '(tabs)';
-
-    // Temporarily disable redirects for testing
-    /*
-    // If onboarding not completed, show onboarding
-    if (!isOnboardingCompleted && !inOnboarding) {
-      router.replace('/onboarding');
-      return;
-    }
-
-    // If onboarding completed but no user, show auth
-    if (isOnboardingCompleted && !user && !inAuth && !inOnboarding) {
-      router.replace('/(auth)');
-      return;
-    }
-
-    // If user is authenticated, show tabs
-    if (user && !inTabs && !inOnboarding) {
-      router.replace('/(tabs)');
-      return;
-    }
-    */
-  }, [isOnboardingCompleted, onboardingLoading, user, segments, router]);
-
-  if (onboardingLoading) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.backgroundLight }}>
-        <ActivityIndicator size="large" color={Colors.primary} />
-      </View>
-    );
-  }
-
   return (
-    <>
+    <AuthGuard>
       <StatusBar style="light" />
       <Stack
         screenOptions={{
@@ -127,16 +128,9 @@ function RootLayoutNav() {
           }} 
         />
         <Stack.Screen 
-          name="challenges/leaderboard" 
-          options={{ 
-            title: "Challenge Leaderboard",
-          }} 
-        />
-        <Stack.Screen 
           name="marketplace/details" 
           options={{ 
             title: "Item Details",
-            headerShown: false,
           }} 
         />
         <Stack.Screen 
@@ -146,46 +140,12 @@ function RootLayoutNav() {
           }} 
         />
         <Stack.Screen 
-          name="profile/index" 
-          options={{ 
-            title: "Profile",
-          }} 
-        />
-        <Stack.Screen 
-          name="settings/index" 
-          options={{ 
-            title: "Settings",
-            headerShown: false,
-          }} 
-        />
-        <Stack.Screen 
-          name="help/index" 
-          options={{ 
-            title: "Help & Support",
-            headerShown: false,
-          }} 
-        />
-        <Stack.Screen 
-          name="privacy/index" 
-          options={{ 
-            title: "Privacy Policy",
-            headerShown: false,
-          }} 
-        />
-        <Stack.Screen 
-          name="verification/index" 
-          options={{ 
-            title: "Verify Evidence",
-            headerShown: false,
-          }} 
-        />
-        <Stack.Screen 
-          name="onboarding/index" 
+          name="onboarding" 
           options={{ 
             headerShown: false,
           }} 
         />
       </Stack>
-    </>
+    </AuthGuard>
   );
 }

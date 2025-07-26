@@ -14,13 +14,16 @@
 // Updated on 2025-07-07
 export type EcoActivity = {
   id: string;
-  type: 'cycling' | 'publicTransport' | 'recycling' | 'energySaving' | 'plantBasedMeal' | 'secondHandPurchase';
+  type: 'walking' | 'cycling' | 'publicTransport' | 'recycling' | 'energySaving' | 'plantBasedMeal' | 'secondHandPurchase';
   title: string;
   description: string;
   date: string;
   co2Saved: number;
   points: number;
   verified: boolean;
+  status?: 'pending' | 'verified' | 'rejected' | 'voting';
+  user?: { name: string };
+  votes?: { userId: string; value: 'yes' | 'no' | 'fake' | 'spam' }[];
 };
 
 export type Challenge = {
@@ -69,8 +72,9 @@ export type Notification = {
 
 export type UserProfile = {
   id: string;
-  name: string;
   email: string;
+  role: 'user' | 'admin';
+  name: string;
   avatar?: string;
   ecoPoints: number;
   totalCO2Saved: number;
