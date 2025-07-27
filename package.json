@@ -7,8 +7,8 @@
     "start-web": "bunx rork start -p wap3z1ibm1ud6he0oropr --web --tunnel",
     "start-web-dev": "DEBUG=expo* bunx rork start -p wap3z1ibm1ud6he0oropr --web --tunnel",
     "reset-project": "node ./scripts/reset-project.js",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint"
   },
@@ -57,6 +57,7 @@
   "devDependencies": {
     "@babel/core": "^7.25.2",
     "@expo/ngrok": "^4.1.0",
+    "@react-native-community/cli": "^19.1.1",
     "@types/react": "~19.0.10",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~9.2.0",
