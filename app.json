@@ -4,6 +4,7 @@
     "slug": "greenmint-mob",
     "version": "1.0.0",
     "orientation": "portrait",
+    "owner": "landry_sb",
     "icon": "./assets/images/icon.png",
     "scheme": "greenmintmob",
     "userInterfaceStyle": "automatic",
@@ -46,7 +47,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "5da46d45-dbc2-4770-9807-4110f17f587f"
+        "projectId": "d9b6e31d-0d17-499b-a838-ea924bc6dd08"
       }
     }
   }
