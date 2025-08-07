@@ -27,6 +27,7 @@ interface UserState {
   mintNFT: (nftData: any) => Promise<void>;
   connectWallet: (address: string) => Promise<void>;
   getWalletStatus: () => Promise<any>;
+  updateUser: (updates: Partial<UserProfile>) => void;
 }
 
 export const useUserStore = create<UserState>()(
@@ -50,7 +51,13 @@ export const useUserStore = create<UserState>()(
               email: res.data.user.email,
               role: res.data.user.role,
               name: res.data.user.username || res.data.user.name || '',
-              // ...add other fields as needed
+              ecoPoints: res.data.user.ecoPoints || 0,
+              totalCO2Saved: (res.data.user.ecoPoints || 0) / 2,
+              level: Math.floor((res.data.user.ecoPoints || 0) / 100) + 1,
+              joinDate: res.data.user.joinDate || new Date().toISOString(),
+              activities: res.data.user.activities || [],
+              challenges: res.data.user.challenges || [],
+              nfts: res.data.user.nfts || [],
             },
             token: res.data.accessToken,
             isLoading: false
@@ -76,7 +83,13 @@ export const useUserStore = create<UserState>()(
               email: res.data.user.email,
               role: res.data.user.role,
               name: res.data.user.username || res.data.user.name || '',
-              // ...add other fields as needed
+              ecoPoints: res.data.user.ecoPoints || 0,
+              totalCO2Saved: (res.data.user.ecoPoints || 0) / 2,
+              level: Math.floor((res.data.user.ecoPoints || 0) / 100) + 1,
+              joinDate: res.data.user.joinDate || new Date().toISOString(),
+              activities: res.data.user.activities || [],
+              challenges: res.data.user.challenges || [],
+              nfts: res.data.user.nfts || [],
             },
             token: res.data.accessToken,
             isLoading: false
@@ -240,6 +253,13 @@ export const useUserStore = create<UserState>()(
           return res.data;
         } catch (error: any) {
           return { connected: false, message: 'Failed to get wallet status' };
+        }
+      },
+
+      updateUser: (updates) => {
+        const { user } = get();
+        if (user) {
+          set({ user: { ...user, ...updates } });
         }
       },
     }),

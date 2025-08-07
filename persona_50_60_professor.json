@@ -1,0 +1,57 @@
+{
+    "persona": {
+        "name": "50-60대 교수",
+        "age_range": "50-60",
+        "occupation": "대학 정교수",
+        "lifestyle_traits": [
+            "절약적인 생활 태도",
+            "빈번한 국내·국제 학회 출장",
+            "대중교통 중심 출퇴근",
+            "도시 아파트 거주, 전기·가스 절약형",
+            "주 4회 이상 육류 섭취",
+            "연구용 컴퓨팅 및 실험실 자원 사용"
+        ],
+        "carbon_usage": {
+            "business_travel": {
+                "description": "연간 1~3회 국제 학회 출장, 왕복 1회당 약 1.6톤 CO₂e",
+                "annual_emissions_tons": 3.2
+            },
+            "commuting": {
+                "description": "대중교통 위주, 주말에만 자가용 사용",
+                "annual_emissions_tons": 0.5
+            },
+            "household_energy": {
+                "description": "아파트 거주, 전기·가스 절약형",
+                "annual_emissions_tons": 1.5
+            },
+            "diet": {
+                "description": "주 4회 이상 육류 섭취",
+                "annual_emissions_tons": 4.0
+            },
+            "research_activity": {
+                "description": "컴퓨팅 자원 및 실험실 사용",
+                "annual_emissions_tons": 2.5
+            }
+        },
+        "total_annual_emissions_tons": 10.0,
+        "reduction_potential": {
+            "business_travel_change": {
+                "description": "출장 교통수단을 철도/화상회의로 전환",
+                "reduction_percent": 30
+            },
+            "diet_change": {
+                "description": "채식 위주로 변경",
+                "reduction_tons": 0.8
+            },
+            "research_efficiency": {
+                "description": "실험실·컴퓨팅 에너지 효율 향상",
+                "reduction_tons": 0.5
+            }
+        },
+        "key_strategies": [
+            "출장 교통수단 변경",
+            "식단 개선",
+            "연구 인프라 에너지 효율화"
+        ]
+    }
+}

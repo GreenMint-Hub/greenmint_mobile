@@ -1,16 +1,19 @@
 import MarketplaceItem from '@/components/MarketplaceItem';
+import SellTab from '@/components/SellTab';
 import Colors from '@/constants/Colors';
 import { useMarketplaceStore } from '@/store/marketplaceStore';
 import { useUserStore } from '@/store/userStore';
 import { useRouter } from 'expo-router';
-import { Filter, Search, SlidersHorizontal } from 'lucide-react-native';
+import { Filter, Search, SlidersHorizontal, ShoppingCart } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { FlatList, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useCartStore } from '@/store/cartStore';
 
 export default function MarketScreen() {
   const router = useRouter();
   const { items, filteredItems, fetchItems, setSearchQuery } = useMarketplaceStore();
   const { user } = useUserStore();
+  const cartCount = useCartStore((s) => s.items.length);
   const [activeTab, setActiveTab] = useState('Buy');
   const [localSearchQuery, setLocalSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
@@ -31,34 +34,21 @@ export default function MarketScreen() {
     });
   };
 
-  const categories = ['ALL', 'SHOES', 'Jacket', 'Mat', 'Shirt'];
-
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>GreenMint</Text>
-        <View style={styles.pointsContainer}>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           <Text style={styles.pointsText}>{user?.ecoPoints || 0} EcoPoints</Text>
+          <TouchableOpacity onPress={() => router.push('/marketplace/cart')} style={{ marginLeft: 16 }}>
+            <ShoppingCart size={24} color="#fff" />
+            {cartCount > 0 && (
+              <View style={{ position: 'absolute', top: -6, right: -6, backgroundColor: Colors.primary, borderRadius: 8, paddingHorizontal: 4 }}>
+                <Text style={{ color: '#fff', fontSize: 12 }}>{cartCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
         </View>
-      </View>
-
-      <View style={styles.searchContainer}>
-        <View style={styles.searchInputContainer}>
-          <Search size={20} color={Colors.textLight} style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search marketplace"
-            value={localSearchQuery}
-            onChangeText={handleSearch}
-            placeholderTextColor={Colors.textLight}
-          />
-        </View>
-        <TouchableOpacity style={styles.filterButton}>
-          <SlidersHorizontal size={20} color={Colors.text} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.filterButton}>
-          <Filter size={20} color={Colors.text} />
-        </TouchableOpacity>
       </View>
 
       <View style={styles.tabContainer}>
@@ -90,55 +80,47 @@ export default function MarketScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView 
-        horizontal 
-        showsHorizontalScrollIndicator={false}
-        style={styles.categoriesContainer}
-        contentContainerStyle={styles.categoriesContent}
-      >
-        {categories.map((category) => (
-          <TouchableOpacity 
-            key={category}
-            style={[
-              styles.categoryChip,
-              selectedCategory === category && styles.selectedCategoryChip
-            ]}
-            onPress={() => setSelectedCategory(category)}
-          >
-            <Text 
-              style={[
-                styles.categoryText,
-                selectedCategory === category && styles.selectedCategoryText
-              ]}
-            >
-              {category}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-
-      <View style={styles.itemsContainer}>
-        <FlatList
-          data={filteredItems}
-          renderItem={({ item }) => (
-            <MarketplaceItem 
-              item={item}
-              onPress={() => navigateToItemDetails(item.id)}
-            />
-          )}
-          keyExtractor={(item) => item.id}
-          numColumns={2}
-          columnWrapperStyle={styles.itemsRow}
-          showsVerticalScrollIndicator={false}
-          ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>
-                No items found. Try adjusting your search or filters.
-              </Text>
+      {activeTab === 'Buy' ? (
+        <>
+          <View style={styles.searchContainer}>
+            <View style={styles.searchInputContainer}>
+              <Search size={20} color={Colors.textLight} style={styles.searchIcon} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search marketplace"
+                value={localSearchQuery}
+                onChangeText={handleSearch}
+                placeholderTextColor={Colors.textLight}
+              />
             </View>
-          }
-        />
-      </View>
+          </View>
+
+          <View style={styles.itemsContainer}>
+            <FlatList
+              data={filteredItems}
+              renderItem={({ item }) => (
+                <MarketplaceItem 
+                  item={item}
+                  onPress={() => navigateToItemDetails(item._id || item.id || '')}
+                />
+              )}
+              keyExtractor={(item) => item._id || item.id || ''}
+              numColumns={2}
+              columnWrapperStyle={styles.itemsRow}
+              showsVerticalScrollIndicator={false}
+              ListEmptyComponent={
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyStateText}>
+                    No items found. Try adjusting your search or filters.
+                  </Text>
+                </View>
+              }
+            />
+          </View>
+        </>
+      ) : (
+        <SellTab />
+      )}
     </View>
   );
 }

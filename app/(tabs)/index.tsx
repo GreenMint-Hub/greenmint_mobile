@@ -1,4 +1,3 @@
-
 // Updated on 2025-07-07
 // Updated on 2025-07-07
 // Updated on 2025-07-07
@@ -10,7 +9,7 @@ import Colors from '@/constants/Colors';
 import { useChallengeStore } from '@/store/challengeStore';
 import { useUserStore } from '@/store/userStore';
 import { useRouter } from 'expo-router';
-import { Award, Bike, Bus, Leaf, Lightbulb, Recycle, ShoppingBag } from 'lucide-react-native';
+import { Award, Bike, Bus, Footprints, Leaf, Lightbulb, MessageCircle, Recycle, ShoppingBag } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View, Alert } from 'react-native';
 
@@ -44,8 +43,12 @@ export default function HomeScreen() {
     }
   };
 
-  const navigateToLogActivity = () => {
-    router.push('/activity/log');
+  const navigateToLogActivity = (actionType?: string) => {
+    if (actionType) {
+      router.push(`/activity/log?type=${actionType}`);
+    } else {
+      router.push('/activity/log');
+    }
   };
 
   const navigateToAllActivities = () => {
@@ -60,25 +63,42 @@ export default function HomeScreen() {
     );
   }
 
+  // All user-dependent code below this guard
+  const joinDate = new Date(user.joinDate || new Date());
+  const today = new Date();
+  const daysSinceJoin = Math.max(1, Math.floor((today.getTime() - joinDate.getTime()) / (1000 * 60 * 60 * 24)));
+  const totalCO2Saved = (user?.ecoPoints || 0) / 2;
+  
+  // Calculate daily average CO2 saved
+  const dailyCO2Saved = daysSinceJoin > 0 ? (totalCO2Saved / daysSinceJoin) : 0;
+  
+  // Calculate weekly average CO2 saved
+  const weeksSinceJoin = Math.max(1, Math.ceil(daysSinceJoin / 7));
+  const weeklyCO2Saved = totalCO2Saved / weeksSinceJoin;
+  
+  // Calculate monthly average CO2 saved
+  const monthsSinceJoin = Math.max(1, Math.ceil(daysSinceJoin / 30));
+  const monthlyCO2Saved = totalCO2Saved / monthsSinceJoin;
   const recentActivities = user.activities?.slice(0, 3) || [];
   const activeChallenge = activeChallenges[0];
+  // ...existing code...
 
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Welcome, {user.name || 'User'}!</Text>
-        <Text style={styles.points}>Total Points: {user.ecoPoints || 0}</Text>
+        <Text style={styles.title}>Welcome, {(user as any).username || user.name || user.email}!</Text>
+        <Text style={styles.points}>Total Points: {user?.ecoPoints || 0}</Text>
       </View>
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Carbon Impact</Text>
         <Card style={styles.carbonCard}>
           <Text style={styles.carbonLabel}>Total CO₂ Saved</Text>
-          <Text style={styles.carbonValue}>{user.totalCO2Saved || 0}kg</Text>
-          
-          <ProgressBar 
-            progress={user.totalCO2Saved || 0} 
-            total={200} 
+          <Text style={styles.carbonValue}>{(user?.ecoPoints || 0) / 2}kg</Text>
+
+          <ProgressBar
+            progress={(user?.ecoPoints || 0) / 2}
+            total={200}
             color={Colors.primary}
             backgroundColor="rgba(76, 175, 80, 0.2)"
           />
@@ -87,15 +107,21 @@ export default function HomeScreen() {
           <View style={styles.timeframeRow}>
             <View style={styles.timeframeItem}>
               <Text style={styles.timeframeLabel}>Daily</Text>
-              <Text style={styles.timeframeValue}>4.2kg</Text>
+              <Text style={styles.timeframeValue}>
+                {isNaN(dailyCO2Saved) ? '0.00' : dailyCO2Saved.toFixed(2)}kg
+              </Text>
             </View>
             <View style={styles.timeframeItem}>
               <Text style={styles.timeframeLabel}>Weekly</Text>
-              <Text style={styles.timeframeValue}>28.5kg</Text>
+              <Text style={styles.timeframeValue}>
+                {isNaN(weeklyCO2Saved) ? '0.00' : weeklyCO2Saved.toFixed(2)}kg
+              </Text>
             </View>
             <View style={styles.timeframeItem}>
               <Text style={styles.timeframeLabel}>Monthly</Text>
-              <Text style={styles.timeframeValue}>{user.totalCO2Saved || 0}kg</Text>
+              <Text style={styles.timeframeValue}>
+                {isNaN(monthlyCO2Saved) ? '0.00' : monthlyCO2Saved.toFixed(2)}kg
+              </Text>
             </View>
           </View>
         </Card>
@@ -106,7 +132,7 @@ export default function HomeScreen() {
         <View style={styles.actionsGrid}>
           <TouchableOpacity 
             style={styles.actionItem}
-            onPress={navigateToLogActivity}
+            onPress={() => navigateToLogActivity('cycling')}
           >
             <View style={styles.actionIcon}>
               <Bike size={24} color={Colors.primary} />
@@ -116,7 +142,7 @@ export default function HomeScreen() {
           
           <TouchableOpacity 
             style={styles.actionItem}
-            onPress={navigateToLogActivity}
+            onPress={() => navigateToLogActivity('public-transport')}
           >
             <View style={styles.actionIcon}>
               <Bus size={24} color={Colors.primary} />
@@ -126,27 +152,17 @@ export default function HomeScreen() {
           
           <TouchableOpacity 
             style={styles.actionItem}
-            onPress={navigateToLogActivity}
+            onPress={() => navigateToLogActivity('walking')}
           >
             <View style={styles.actionIcon}>
-              <Recycle size={24} color={Colors.primary} />
+              <Footprints size={24} color={Colors.primary} />
             </View>
-            <Text style={styles.actionText}>Recycling</Text>
+            <Text style={styles.actionText}>Walking</Text>
           </TouchableOpacity>
           
           <TouchableOpacity 
             style={styles.actionItem}
-            onPress={navigateToLogActivity}
-          >
-            <View style={styles.actionIcon}>
-              <Lightbulb size={24} color={Colors.primary} />
-            </View>
-            <Text style={styles.actionText}>Energy Saving</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.actionItem}
-            onPress={navigateToLogActivity}
+            onPress={() => navigateToLogActivity('plant-based-meal')}
           >
             <View style={styles.actionIcon}>
               <Leaf size={24} color={Colors.primary} />
@@ -156,13 +172,14 @@ export default function HomeScreen() {
           
           <TouchableOpacity 
             style={styles.actionItem}
-            onPress={navigateToLogActivity}
+            onPress={() => navigateToLogActivity('secondhand')}
           >
             <View style={styles.actionIcon}>
               <ShoppingBag size={24} color={Colors.primary} />
             </View>
             <Text style={styles.actionText}>Second-hand Purchase</Text>
           </TouchableOpacity>
+          
         </View>
       </View>
 
@@ -175,12 +192,9 @@ export default function HomeScreen() {
         </View>
         
         <View style={styles.tabContainer}>
-          <TouchableOpacity style={[styles.tab, styles.activeTab]}>
+          {/* <TouchableOpacity style={[styles.tab, styles.activeTab]}>
             <Text style={[styles.tabText, styles.activeTabText]}>Activities</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.tab}>
-            <Text style={styles.tabText}>Statistics</Text>
-          </TouchableOpacity>
+          </TouchableOpacity> */}
         </View>
         
         {recentActivities.map((activity) => (

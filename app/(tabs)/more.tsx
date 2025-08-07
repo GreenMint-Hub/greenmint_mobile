@@ -69,7 +69,7 @@ export default function MoreScreen() {
           style={styles.avatar} 
         />
         <View style={styles.profileInfo}>
-          <Text style={styles.profileName}>{user.name}</Text>
+          <Text style={styles.profileName}>{(user as any).username || user.name || user.email}</Text>
           <Text style={styles.profileEmail}>{user.email}</Text>
         </View>
         <ChevronRight size={20} color={Colors.textLight} />

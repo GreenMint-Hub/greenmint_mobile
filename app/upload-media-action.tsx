@@ -1,104 +1,103 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ScrollView, Platform } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
-import Colors from '@/constants/Colors';
-import Button from '@/components/Button';
+import { View, Text, StyleSheet, Alert, ScrollView, Platform } from 'react-native';
 import axios from 'axios';
 import { API_CONFIG } from '@/constants/api';
+import EcoActionCapture from '@/components/EcoActionCapture';
+import { useRouter } from 'expo-router';
 
 const ACTION_TYPES = [
   { label: 'Recycling', value: 'recycling' },
-  { label: 'Bus Ride', value: 'bus' },
+  { label: 'Public Transport', value: 'publicTransport' },
+  { label: 'Plant-based Meal', value: 'plantBasedMeal' },
+  { label: 'Energy Saving', value: 'energySaving' },
+  { label: 'Second-hand Purchase', value: 'secondHandPurchase' },
   { label: 'Other', value: 'other' },
 ];
 
 export default function UploadMediaAction() {
-  const [actionType, setActionType] = useState('recycling');
-  const [description, setDescription] = useState('');
-  const [media, setMedia] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<string | null>(null);
+  const router = useRouter();
+  const [selectedActionType, setSelectedActionType] = useState('recycling');
+  const [showActionCapture, setShowActionCapture] = useState(false);
 
-  const pickMedia = async () => {
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.All,
-      allowsEditing: false,
-      quality: 0.7,
-    });
-    if (!result.canceled && result.assets && result.assets.length > 0) {
-      setMedia(result.assets[0]);
-    }
-  };
-
-  const handleSubmit = async () => {
-    if (!media) {
-      Alert.alert('Please select a photo or video.');
-      return;
-    }
-    setLoading(true);
-    setResult(null);
+  const handleActionSubmitted = async (actionData: any) => {
     try {
       const formData = new FormData();
       formData.append('file', {
-        uri: Platform.OS === 'web' ? media.uri : media.uri,
-        name: media.fileName || 'upload.jpg',
-        type: media.type || 'image/jpeg',
+        uri: Platform.OS === 'web' ? actionData.media.uri : actionData.media.uri,
+        name: actionData.media.fileName || 'upload.jpg',
+        type: actionData.media.type || 'image/jpeg',
       } as any);
-      formData.append('actionType', actionType);
-      formData.append('description', description);
+      formData.append('actionType', actionData.actionType);
+      formData.append('description', actionData.description);
+      
       const res = await axios.post(`${API_CONFIG.API_URL}/activity/media`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
           Authorization: `Bearer ${localStorage.getItem('token')}`,
         },
       });
-      setResult('Media action uploaded! Status: ' + (res.data.activity.status || 'voting'));
+      
+      Alert.alert('Success!', 'Your eco-friendly action has been submitted for community review.');
+      router.back();
     } catch (err: any) {
-      setResult('Error: ' + (err.response?.data?.message || err.message));
-    } finally {
-      setLoading(false);
+      Alert.alert('Error', err.response?.data?.message || 'Failed to submit action. Please try again.');
     }
   };
 
+  const handleClose = () => {
+    router.back();
+  };
+
+  if (showActionCapture) {
+    return (
+      <EcoActionCapture
+        actionType={selectedActionType}
+        onActionSubmitted={handleActionSubmitted}
+        onClose={handleClose}
+      />
+    );
+  }
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Upload Media-Based Eco Action</Text>
-      <Text style={styles.label}>Action Type</Text>
-      <View style={styles.row}>
-        {ACTION_TYPES.map((a) => (
+      <Text style={styles.title}>Log Eco-Friendly Action</Text>
+      <Text style={styles.subtitle}>
+        Take a photo of your eco-friendly action and share it with the community
+      </Text>
+
+      <View style={styles.actionTypesContainer}>
+        {ACTION_TYPES.map((actionType) => (
           <TouchableOpacity
-            key={a.value}
-            style={[styles.typeButton, actionType === a.value && styles.typeButtonActive]}
-            onPress={() => setActionType(a.value)}
+            key={actionType.value}
+            style={[
+              styles.actionTypeCard,
+              selectedActionType === actionType.value && styles.selectedActionTypeCard
+            ]}
+            onPress={() => setSelectedActionType(actionType.value)}
           >
-            <Text style={actionType === a.value ? styles.typeTextActive : styles.typeText}>{a.label}</Text>
+            <Text style={[
+              styles.actionTypeText,
+              selectedActionType === actionType.value && styles.selectedActionTypeText
+            ]}>
+              {actionType.label}
+            </Text>
+            {selectedActionType === actionType.value && (
+              <View style={styles.checkmark}>
+                <Text style={styles.checkmarkText}>✓</Text>
+              </View>
+            )}
           </TouchableOpacity>
         ))}
       </View>
-      <Text style={styles.label}>Description</Text>
-      <TextInput
-        style={styles.input}
-        value={description}
-        onChangeText={setDescription}
-        placeholder="Describe your action..."
-      />
-      <Button
-        title={media ? 'Change Photo/Video' : 'Pick Photo/Video'}
-        variant="outline"
-        onPress={pickMedia}
-        style={styles.button}
-      />
-      {media && (
-        <Text style={styles.mediaInfo}>Selected: {media.fileName || media.uri}</Text>
-      )}
-      <Button
-        title={loading ? 'Uploading...' : 'Upload Action'}
-        variant="primary"
-        onPress={handleSubmit}
-        disabled={loading}
-        style={styles.button}
-      />
-      {result && <Text style={styles.result}>{result}</Text>}
+
+      <View style={styles.buttonContainer}>
+        <TouchableOpacity
+          style={styles.startButton}
+          onPress={() => setShowActionCapture(true)}
+        >
+          <Text style={styles.startButtonText}>Start Capturing Action</Text>
+        </TouchableOpacity>
+      </View>
     </ScrollView>
   );
 }
@@ -106,69 +105,79 @@ export default function UploadMediaAction() {
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
-    backgroundColor: Colors.backgroundLight,
+    backgroundColor: '#f8f9fa',
     padding: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: '700',
-    color: Colors.primary,
-    marginBottom: 24,
-  },
-  label: {
-    fontSize: 16,
-    color: Colors.text,
-    marginTop: 16,
-    marginBottom: 4,
-    alignSelf: 'flex-start',
-  },
-  input: {
-    width: '100%',
-    backgroundColor: Colors.white,
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
+    color: '#333',
     marginBottom: 8,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    textAlign: 'center',
   },
-  row: {
+  subtitle: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 32,
+    lineHeight: 22,
+  },
+  actionTypesContainer: {
+    marginBottom: 32,
+  },
+  actionTypeCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 12,
+    borderWidth: 2,
+    borderColor: '#e0e0e0',
     flexDirection: 'row',
-    marginBottom: 8,
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
-  typeButton: {
-    padding: 10,
-    borderRadius: 8,
-    backgroundColor: Colors.border,
-    marginRight: 8,
+  selectedActionTypeCard: {
+    borderColor: '#007AFF',
+    backgroundColor: '#f0f8ff',
   },
-  typeButtonActive: {
-    backgroundColor: Colors.primary,
-  },
-  typeText: {
-    color: Colors.text,
-    fontWeight: '500',
-  },
-  typeTextActive: {
-    color: Colors.white,
-    fontWeight: '700',
-  },
-  button: {
-    marginTop: 16,
-    width: '100%',
-  },
-  mediaInfo: {
-    marginTop: 8,
-    fontSize: 14,
-    color: Colors.textLight,
-    textAlign: 'center',
-  },
-  result: {
-    marginTop: 24,
+  actionTypeText: {
     fontSize: 16,
-    color: Colors.text,
-    textAlign: 'center',
+    fontWeight: '600',
+    color: '#333',
+  },
+  selectedActionTypeText: {
+    color: '#007AFF',
+  },
+  checkmark: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#007AFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkmarkText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  buttonContainer: {
+    marginTop: 'auto',
+  },
+  startButton: {
+    backgroundColor: '#007AFF',
+    borderRadius: 12,
+    padding: 18,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  startButtonText: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: '600',
   },
 }); 

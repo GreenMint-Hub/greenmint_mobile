@@ -4,6 +4,7 @@ import React from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import Button from './Button';
 import Card from './Card';
+import { useCartStore } from '@/store/cartStore';
 
 interface MarketplaceItemProps {
   item: MarketplaceItemType;
@@ -11,6 +12,7 @@ interface MarketplaceItemProps {
 }
 
 export default function MarketplaceItem({ item, onPress }: MarketplaceItemProps) {
+  const addToCart = useCartStore((s) => s.addToCart);
   return (
     <Card variant="outlined" style={styles.card}>
       <View style={styles.imageContainer}>
@@ -30,6 +32,13 @@ export default function MarketplaceItem({ item, onPress }: MarketplaceItemProps)
           variant="primary" 
           size="small" 
           onPress={onPress} 
+          style={styles.button}
+        />
+        <Button
+          title="Add to Cart"
+          variant="outline"
+          size="small"
+          onPress={() => addToCart({ id: item._id || item.id || '', title: item.title, price: item.price, image: item.image })}
           style={styles.button}
         />
       </View>

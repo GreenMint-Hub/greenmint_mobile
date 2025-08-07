@@ -1,6 +1,8 @@
 import { create } from 'zustand';
-import { MARKETPLACE_ITEMS } from '@/mocks/marketplace';
 import { MarketplaceItem } from '@/types';
+import { API_CONFIG } from '@/constants/api';
+import { useUserStore } from './userStore';
+import { MARKETPLACE_ITEMS } from '@/mocks/marketplace';
 
 interface MarketplaceState {
   items: MarketplaceItem[];
@@ -28,15 +30,27 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
   fetchItems: async () => {
     set({ isLoading: true, error: null });
     try {
-      // In a real app, this would be an API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const response = await fetch(`${API_CONFIG.API_URL}/marketplace`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch marketplace items');
+      }
+      const items = await response.json();
+      
+      // If no items from API, use mock data
+      const finalItems = items && items.length > 0 ? items : MARKETPLACE_ITEMS;
+      
+      set({ 
+        items: finalItems,
+        filteredItems: finalItems,
+        isLoading: false 
+      });
+    } catch (error) {
+      // On error, use mock data
       set({ 
         items: MARKETPLACE_ITEMS,
         filteredItems: MARKETPLACE_ITEMS,
         isLoading: false 
       });
-    } catch (error) {
-      set({ error: 'Failed to fetch marketplace items', isLoading: false });
     }
   },
   
@@ -93,39 +107,32 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
   addItem: async (itemData) => {
     set({ isLoading: true, error: null });
     try {
-      // In a real app, this would be an API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      const { items, selectedCategory, searchQuery } = get();
-      
-      const newItem: MarketplaceItem = {
-        id: Date.now().toString(),
-        ...itemData,
-      };
-      
-      const updatedItems = [newItem, ...items];
-      
-      let filtered = updatedItems;
-      
-      // Apply category filter if selected
-      if (selectedCategory) {
-        filtered = filtered.filter(item => 
-          item.title.toLowerCase().includes(selectedCategory.toLowerCase())
-        );
+      // Get token from user store
+      const { token } = useUserStore.getState();
+      if (!token) {
+        throw new Error('No authentication token found');
       }
-      
-      // Apply search filter if there's a query
-      if (searchQuery) {
-        filtered = filtered.filter(item => 
-          item.title.toLowerCase().includes(searchQuery.toLowerCase())
-        );
-      }
-      
-      set({ 
-        items: updatedItems,
-        filteredItems: filtered,
-        isLoading: false 
+
+      const response = await fetch(`${API_CONFIG.API_URL}/marketplace`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(itemData),
       });
+
+      if (!response.ok) {
+        throw new Error('Failed to add marketplace item');
+      }
+
+      const newItem = await response.json();
+      
+      // Refresh the items list
+      const { fetchItems } = get();
+      await fetchItems();
+      
+      set({ isLoading: false });
     } catch (error) {
       set({ error: 'Failed to add marketplace item', isLoading: false });
     }

@@ -1,17 +1,3 @@
-// Updated on 2025-07-07
-// Updated on 2025-07-07
-// Updated on 2025-07-07
-// Updated on 2025-07-07
-// Updated on 2025-07-07
-// Updated on 2025-07-07
-// Updated on 2025-07-07
-// Updated on 2025-07-07
-// Updated on 2025-07-07
-// Updated on 2025-07-07
-// Updated on 2025-07-07
-// Updated on 2025-07-07
-// Updated on 2025-07-07
-// Updated on 2025-07-07
 export type EcoActivity = {
   id: string;
   type: 'walking' | 'cycling' | 'publicTransport' | 'recycling' | 'energySaving' | 'plantBasedMeal' | 'secondHandPurchase';
@@ -52,13 +38,22 @@ export type NFT = {
 };
 
 export type MarketplaceItem = {
-  id: string;
+  _id?: string;
+  id?: string;
   title: string;
+  description: string;
   price: number;
   image: string;
   co2Saved: number;
-  condition: 'New' | 'Like New' | 'Good' | 'Fair';
+  condition: string;
   seller: string;
+  sellerId?: string;
+  isActive?: boolean;
+  isSold?: boolean;
+  soldAt?: string;
+  buyerId?: string;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export type Notification = {

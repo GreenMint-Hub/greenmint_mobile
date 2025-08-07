@@ -3,6 +3,7 @@ import Button from '@/components/Button';
 import Card from '@/components/Card';
 import ProgressBar from '@/components/ProgressBar';
 import Colors from '@/constants/Colors';
+import { useChallengeStore } from '@/store/challengeStore';
 import { useUserStore } from '@/store/userStore';
 import { useRouter } from 'expo-router';
 import { Bike, Bus, Leaf, ShoppingBag, Footprints } from 'lucide-react-native';
@@ -13,7 +14,7 @@ import { API_CONFIG } from '@/constants/api';
 
 export default function CarbonScreen() {
   const router = useRouter();
-  const { user, loadUserData } = useUserStore();
+  const { user, loadUserData, getWalletStatus, mintNFT } = useUserStore();
   const [timeframe, setTimeframe] = useState('This Week');
   const [activeTab, setActiveTab] = useState('Activities');
   const [feedTab, setFeedTab] = useState<'my' | 'community'>('my');
@@ -56,6 +57,24 @@ export default function CarbonScreen() {
     router.push('/activity/vote');
   };
 
+  // Safe calculation of join date and stats
+  const joinDate = user?.joinDate ? new Date(user.joinDate) : new Date();
+  const today = new Date();
+  const daysSinceJoin = Math.max(1, Math.floor((today.getTime() - joinDate.getTime()) / (1000 * 60 * 60 * 24)));
+  const dailyCO2Saved = user?.totalCO2Saved ? user.totalCO2Saved / daysSinceJoin : 0;
+  const weeklyCO2Saved = user?.totalCO2Saved ? user.totalCO2Saved / Math.floor(daysSinceJoin / 7) : 0;
+  const monthlyCO2Saved = user?.totalCO2Saved ? user.totalCO2Saved / Math.floor(daysSinceJoin / 30) : 0;
+  const recentActivities = user?.activities?.slice(0, 3) || [];
+
+  // Calculate progress percentages
+  const totalPoints = user?.ecoPoints || 0;
+  const totalCO2Saved = user?.totalCO2Saved || 0;
+  const goalCO2 = 200; // 200kg CO2 goal
+  const goalPoints = 1000; // 1000 points goal
+  const co2Progress = Math.min((totalCO2Saved / goalCO2) * 100, 100);
+  const pointsProgress = Math.min((totalPoints / goalPoints) * 100, 100);
+
+
   if (!user) {
     return (
       <View style={styles.loadingContainer}>
@@ -82,7 +101,7 @@ export default function CarbonScreen() {
         <View style={styles.carbonHeader}>
           <View>
             <Text style={styles.carbonLabel}>Total CO₂ Saved</Text>
-            <Text style={styles.carbonValue}>{user.totalCO2Saved || 0}kg</Text>
+            <Text style={styles.carbonValue}>{user?.ecoPoints / 2 || 0} kg</Text>
           </View>
           <TouchableOpacity style={styles.timeframeSelector}>
             <Text style={styles.timeframeText}>{timeframe}</Text>
@@ -90,25 +109,37 @@ export default function CarbonScreen() {
         </View>
         
         <ProgressBar 
-          progress={user.totalCO2Saved || 0} 
-          total={200} 
+          progress={co2Progress} 
+          total={100} 
           color={Colors.primary}
           backgroundColor="rgba(76, 175, 80, 0.2)"
         />
-        <Text style={styles.goalText}>Goal 200kg CO₂</Text>
+        <Text style={styles.goalText}>Goal: {goalCO2}kg CO₂ ({co2Progress.toFixed(1)}%)</Text>
+        
+        <View style={styles.pointsSection}>
+          <Text style={styles.pointsLabel}>Total Points Earned</Text>
+          <Text style={styles.pointsValue}>{totalPoints}</Text>
+          <ProgressBar 
+            progress={pointsProgress} 
+            total={100} 
+            color="#FF9800"
+            backgroundColor="rgba(255, 152, 0, 0.2)"
+          />
+          <Text style={styles.goalText}>Goal: {goalPoints} points ({pointsProgress.toFixed(1)}%)</Text>
+        </View>
         
         <View style={styles.timeframeRow}>
           <View style={styles.timeframeItem}>
             <Text style={styles.timeframeLabel}>Daily</Text>
-            <Text style={styles.timeframeValue}>4.2kg</Text>
+            <Text style={styles.timeframeValue}>{dailyCO2Saved.toFixed(1)}kg</Text>
           </View>
           <View style={styles.timeframeItem}>
             <Text style={styles.timeframeLabel}>Weekly</Text>
-            <Text style={styles.timeframeValue}>28.5kg</Text>
+            <Text style={styles.timeframeValue}>{weeklyCO2Saved.toFixed(1)}kg</Text>
           </View>
           <View style={styles.timeframeItem}>
             <Text style={styles.timeframeLabel}>Monthly</Text>
-            <Text style={styles.timeframeValue}>{user.totalCO2Saved || 0}kg</Text>
+            <Text style={styles.timeframeValue}>{monthlyCO2Saved.toFixed(1)}kg</Text>
           </View>
         </View>
       </Card>
@@ -120,7 +151,7 @@ export default function CarbonScreen() {
             <TouchableOpacity
               key={action.label}
               style={styles.actionItem}
-              onPress={() => router.push({ pathname: '/activity/log', params: { type: action.label.toLowerCase().replace(/ /g, '-') } })}
+              onPress={() => router.push({ pathname: '/activity/log', params: { type: action.label.toLowerCase().replace(/ /g, '-').replace('secondhand-purchase', 'secondhand') } })}
             >
               <View style={styles.actionIcon}>
                 <action.icon size={24} color={Colors.primary} />
@@ -156,96 +187,13 @@ export default function CarbonScreen() {
         ) : (
           loading ? <Text>Loading...</Text> :
           communityActions.length === 0 ? <Text style={{ color: Colors.textLight, marginTop: 16 }}>No actions to vote on right now.</Text> :
-          communityActions.map((activity) => (
-            <ActivityCard key={activity.id} activity={activity} showVoteButton onVote={() => router.push({ pathname: '/activity/vote', params: { id: activity.id } })} />
+          communityActions.map((activity, idx) => (
+            <ActivityCard key={activity.id || idx} activity={activity} showVoteButton onVote={() => router.push({ pathname: '/activity/vote', params: { id: activity.id } })} />
           ))
         )}
       </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Activity History</Text>
-        
-        <View style={styles.tabContainer}>
-          <TouchableOpacity 
-            style={[styles.tab, activeTab === 'Activities' && styles.activeTab]}
-            onPress={() => setActiveTab('Activities')}
-          >
-            <Text 
-              style={[
-                styles.tabText, 
-                activeTab === 'Activities' && styles.activeTabText
-              ]}
-            >
-              Activities
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.tab, activeTab === 'Statistics' && styles.activeTab]}
-            onPress={() => setActiveTab('Statistics')}
-          >
-            <Text 
-              style={[
-                styles.tabText, 
-                activeTab === 'Statistics' && styles.activeTabText
-              ]}
-            >
-              Statistics
-            </Text>
-          </TouchableOpacity>
-        </View>
-        
-        {activeTab === 'Activities' ? (
-          <>
-            {user.activities?.map((activity) => (
-              <ActivityCard key={activity.id} activity={activity} />
-            ))}
-          </>
-        ) : (
-          <Card style={styles.statisticsCard}>
-            <Text style={styles.statisticsTitle}>Carbon Savings by Activity</Text>
-            
-            <View style={styles.statItem}>
-              <View style={styles.statLabel}>
-                <View style={[styles.statDot, { backgroundColor: Colors.primary }]} />
-                <Text style={styles.statText}>Recycling</Text>
-              </View>
-              <Text style={styles.statValue}>45kg CO₂</Text>
-            </View>
-            
-            <View style={styles.statItem}>
-              <View style={styles.statLabel}>
-                <View style={[styles.statDot, { backgroundColor: '#81C784' }]} />
-                <Text style={styles.statText}>Cycling</Text>
-              </View>
-              <Text style={styles.statValue}>32kg CO₂</Text>
-            </View>
-            
-            <View style={styles.statItem}>
-              <View style={styles.statLabel}>
-                <View style={[styles.statDot, { backgroundColor: '#AED581' }]} />
-                <Text style={styles.statText}>Public Transport</Text>
-              </View>
-              <Text style={styles.statValue}>28kg CO₂</Text>
-            </View>
-            
-            <View style={styles.statItem}>
-              <View style={styles.statLabel}>
-                <View style={[styles.statDot, { backgroundColor: '#C5E1A5' }]} />
-                <Text style={styles.statText}>Energy Saving</Text>
-              </View>
-              <Text style={styles.statValue}>15kg CO₂</Text>
-            </View>
-            
-            <View style={styles.statItem}>
-              <View style={styles.statLabel}>
-                <View style={[styles.statDot, { backgroundColor: '#E6EE9C' }]} />
-                <Text style={styles.statText}>Plant-based Meals</Text>
-              </View>
-              <Text style={styles.statValue}>5kg CO₂</Text>
-            </View>
-          </Card>
-        )}
-      </View>
+
     </ScrollView>
   );
 }
@@ -331,6 +279,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: Colors.text,
+  },
+  pointsSection: {
+    marginTop: 16,
+    marginBottom: 16,
+  },
+  pointsLabel: {
+    fontSize: 14,
+    color: Colors.textLight,
+    marginBottom: 4,
+  },
+  pointsValue: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#FF9800',
+    marginBottom: 8,
   },
   section: {
     padding: 16,

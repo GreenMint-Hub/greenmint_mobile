@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, View, ScrollView, Image, TextInput, TouchableOpacity, Alert } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import ProfileIcon from '@/components/ProfileIcon';
 import { useRouter } from 'expo-router';
 import { useUserStore } from '@/store/userStore';
 import Colors from '@/constants/Colors';
 import Card from '@/components/Card';
 import Button from '@/components/Button';
 import { User, Mail, Calendar, MapPin, Edit3, Save, Camera } from 'lucide-react-native';
+import { API_CONFIG } from '@/constants/api';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -24,11 +27,83 @@ export default function ProfileScreen() {
       'Change Profile Picture',
       'Choose an option',
       [
-        { text: 'Camera', onPress: () => console.log('Camera selected') },
-        { text: 'Gallery', onPress: () => console.log('Gallery selected') },
+        { text: 'Camera', onPress: () => takePhoto() },
+        { text: 'Gallery', onPress: () => pickImage() },
         { text: 'Cancel', style: 'cancel' },
       ]
     );
+  };
+
+  const takePhoto = async () => {
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        await uploadProfilePicture(result.assets[0]);
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to take photo. Please try again.');
+    }
+  };
+
+  const pickImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        await uploadProfilePicture(result.assets[0]);
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to pick image. Please try again.');
+    }
+  };
+
+  const uploadProfilePicture = async (imageAsset: any) => {
+    try {
+      const { token } = useUserStore.getState();
+      if (!token) {
+        Alert.alert('Error', 'Please log in to update your profile picture.');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('avatar', {
+        uri: imageAsset.uri,
+        type: 'image/jpeg',
+        name: 'profile-picture.jpg',
+      } as any);
+
+      const response = await fetch(`${API_CONFIG.API_URL}/users/profile/avatar`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to upload profile picture');
+      }
+
+      const result = await response.json();
+      
+      // Update user store with new avatar
+      useUserStore.getState().updateUser({ avatar: result.avatar });
+      
+      Alert.alert('Success', 'Profile picture updated successfully!');
+    } catch (error) {
+      Alert.alert('Error', 'Failed to upload profile picture. Please try again.');
+    }
   };
 
   if (!user) {
@@ -43,10 +118,14 @@ export default function ProfileScreen() {
     <ScrollView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.avatarContainer} onPress={handleImagePicker}>
-          <Image 
-            source={{ uri: user.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=60' }} 
-            style={styles.avatar} 
-          />
+          {user.avatar ? (
+            <Image 
+              source={{ uri: user.avatar }} 
+              style={styles.avatar} 
+            />
+          ) : (
+            <ProfileIcon size={80} color={Colors.primary} />
+          )}
           <View style={styles.cameraIcon}>
             <Camera size={16} color={Colors.white} />
           </View>
@@ -76,13 +155,13 @@ export default function ProfileScreen() {
 
       <View style={styles.statsContainer}>
         <View style={styles.statItem}>
-          <Text style={styles.statValue}>{user.totalCO2Saved}kg</Text>
+          <Text style={styles.statValue}>{(user?.ecoPoints || 0) / 2} kg</Text>
           <Text style={styles.statLabel}>CO₂ Saved</Text>
         </View>
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
           <Text style={styles.statValue}>{(user.activities || []).length}</Text>
-          <Text style={styles.statLabel}>Activities</Text>
+          <Text style={styles.statLabel}>My Actions</Text>
         </View>
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
@@ -148,11 +227,13 @@ export default function ProfileScreen() {
             <View style={styles.infoContent}>
               <Text style={styles.infoLabel}>Member Since</Text>
               <Text style={styles.infoValue}>
-                {new Date(user.joinDate).toLocaleDateString('en-US', {
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric'
-                })}
+                {user.joinDate && !isNaN(new Date(user.joinDate).getTime())
+                  ? new Date(user.joinDate).toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric'
+                    })
+                  : 'Date not available'}
               </Text>
             </View>
           </View>
@@ -165,7 +246,9 @@ export default function ProfileScreen() {
             </View>
             <View style={styles.infoContent}>
               <Text style={styles.infoLabel}>Location</Text>
-              <Text style={styles.infoValue}>Not specified</Text>
+              <Text style={styles.infoValue}>
+                {user.country ? user.country : 'Not specified'}
+              </Text>
             </View>
           </View>
         </Card>

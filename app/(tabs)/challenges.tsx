@@ -1,30 +1,38 @@
 
 import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, TextInput } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
 import { API_CONFIG } from '@/constants/api';
 import { useUserStore } from '@/store/userStore';
 import Button from '@/components/Button';
 
 export default function ChallengesScreen() {
   const { user, token } = useUserStore();
-  const [tab, setTab] = useState<'available' | 'my' | 'admin'>('available');
+  const params = useLocalSearchParams();
+  const [tab, setTab] = useState<'available' | 'my' | 'completed' | 'admin'>(
+    (params?.tab as any) || 'available'
+  );
   const [available, setAvailable] = useState<any[]>([]);
   const [myChallenges, setMyChallenges] = useState<any[]>([]);
+  const [completedChallenges, setCompletedChallenges] = useState<any[]>([]);
   const [allChallenges, setAllChallenges] = useState<any[]>([]); // For admin
   const [selected, setSelected] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
   const [createForm, setCreateForm] = useState({ name: '', description: '', goalPoints: '', startDate: '', endDate: '' });
   const [createError, setCreateError] = useState('');
 
-  // Fetch available, my, and all challenges
+  // Fetch available, my, completed, and all challenges
   const fetchChallenges = async () => {
     setLoading(true);
     try {
-      const [availRes, myRes, allRes] = await Promise.all([
+      const [availRes, myRes, completedRes, allRes] = await Promise.all([
         fetch(`${API_CONFIG.API_URL}/challenge/available`, {
           headers: { Authorization: `Bearer ${token}` },
         }).then(r => r.json()),
         fetch(`${API_CONFIG.API_URL}/challenge/my`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }).then(r => r.json()),
+        fetch(`${API_CONFIG.API_URL}/challenge/completed`, {
           headers: { Authorization: `Bearer ${token}` },
         }).then(r => r.json()),
         user?.role === 'admin'
@@ -35,6 +43,7 @@ export default function ChallengesScreen() {
       ]);
       setAvailable(Array.isArray(availRes) ? availRes : []);
       setMyChallenges(Array.isArray(myRes) ? myRes : []);
+      setCompletedChallenges(Array.isArray(completedRes) ? completedRes : []);
       setAllChallenges(Array.isArray(allRes) ? allRes : []);
     } catch (e) {
       Alert.alert('Error', 'Failed to load challenges');
@@ -49,24 +58,36 @@ export default function ChallengesScreen() {
 
   // Join a challenge
   const joinChallenge = async (id: string) => {
+    console.log('Attempting to join challenge:', id);
     setLoading(true);
     try {
       const res = await fetch(`${API_CONFIG.API_URL}/challenge/join/${id}`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { 
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}` 
+        },
+        body: JSON.stringify({ userId: user?.id })
       });
+      console.log('Join challenge response status:', res.status);
       if (!res.ok) {
         let errMsg = 'Failed to join challenge';
         try {
           const err = await res.json();
           errMsg = err.message || errMsg;
-        } catch {}
+          console.log('Join challenge error:', err);
+        } catch (e) {
+          console.log('Failed to parse error response');
+        }
         Alert.alert('Error', errMsg);
         throw new Error(errMsg);
       }
+      const result = await res.json();
+      console.log('Join challenge success:', result);
       Alert.alert('Joined!', 'You have joined the challenge.');
       fetchChallenges();
     } catch (e) {
+      console.log('Join challenge exception:', e);
       Alert.alert('Error', 'Failed to join challenge');
     } finally {
       setLoading(false);
@@ -144,58 +165,141 @@ export default function ChallengesScreen() {
   };
 
   // UI for a single challenge card
-  const ChallengeCard = ({ challenge, joined }: { challenge: any; joined?: boolean }) => (
-    <TouchableOpacity
-      style={styles.card}
-      onPress={() => joined ? fetchChallengeDetails(challenge._id) : null}
-      activeOpacity={joined ? 0.7 : 1}
-    >
-      <Text style={styles.title}>{challenge.name}</Text>
-      <Text style={styles.desc}>{challenge.description}</Text>
-      <Text style={styles.info}>Goal: {challenge.goalPoints} points</Text>
-      <Text style={styles.info}>Ends: {new Date(challenge.endDate).toLocaleString()}</Text>
-      {joined ? (
-        <Text style={styles.info}>Status: {challenge.status}</Text>
-      ) : (
-        <Button title="Join" onPress={() => joinChallenge(challenge._id)} />
-      )}
-    </TouchableOpacity>
-  );
+  const ChallengeCard = ({ challenge, joined }: { challenge: any; joined?: boolean }) => {
+    const isCompleted = challenge.status === 'completed' || new Date(challenge.endDate) < new Date();
+    const isExpired = new Date(challenge.endDate) < new Date();
+    const canJoin = !isCompleted && !joined;
+    // Find winner's name if available
+    let winnerName = '';
+    if (challenge.winner) {
+      // Handle different winner formats
+      if (typeof challenge.winner === 'object' && challenge.winner.username) {
+        winnerName = challenge.winner.username;
+      } else if (typeof challenge.winner === 'object' && challenge.winner.name) {
+        winnerName = challenge.winner.name;
+      } else if (typeof challenge.winner === 'object' && challenge.winner.email) {
+        winnerName = challenge.winner.email;
+      } else if (challenge.participants) {
+        // Try to find winner in participants
+        const winner = challenge.participants.find((p: any) => {
+          if (typeof challenge.winner === 'object' && challenge.winner._id) {
+            return p.user?._id === challenge.winner._id;
+          }
+          return p.user?._id === challenge.winner || p.user === challenge.winner;
+        });
+        if (winner && winner.user) {
+          winnerName = winner.user.username || winner.user.email || winner.user.name || 'Unknown User';
+        }
+      }
+      
+      // Fallback if still no name found
+      if (!winnerName) {
+        winnerName = typeof challenge.winner === 'string' ? challenge.winner : 'Unknown User';
+      }
+    }
+    return (
+      <TouchableOpacity
+        style={[styles.card, isCompleted && { backgroundColor: '#e8f5e8' }]}
+        onPress={() => joined ? fetchChallengeDetails(challenge._id) : null}
+        activeOpacity={joined ? 0.7 : 1}
+      >
+        <Text style={styles.title}>{challenge.name}</Text>
+        <Text style={styles.desc}>{challenge.description}</Text>
+        <Text style={styles.info}>Goal: {challenge.goalPoints} points</Text>
+        <Text style={styles.info}>Ends: {new Date(challenge.endDate).toLocaleString()}</Text>
+        {joined ? (
+          <View>
+            <Text style={[styles.info, { color: isCompleted ? '#4CAF50' : '#FF9800' }]}>
+              Status: {isCompleted ? 'Completed' : 'Active'}
+            </Text>
+            {isExpired && challenge.status !== 'completed' && (
+              <Text style={[styles.info, { color: '#FF9800' }]}>Challenge ended - winner will be determined</Text>
+            )}
+            {isCompleted && winnerName && (
+              <Text style={[styles.info, { color: '#4CAF50', fontWeight: 'bold' }]}>🏆 Winner: {winnerName}</Text>
+            )}
+          </View>
+        ) : (
+          <View>
+            {canJoin ? (
+              <Button title="Join" onPress={() => joinChallenge(challenge._id)} />
+            ) : (
+              <Text style={[styles.info, { color: '#999', fontStyle: 'italic' }]}>
+                {isCompleted ? 'Challenge Completed' : 'Already Joined'}
+              </Text>
+            )}
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  };
 
   // UI for challenge details and leaderboard
-  const ChallengeDetails = ({ challenge }: { challenge: any }) => (
-    <View style={styles.detailsContainer}>
-      <Text style={styles.title}>{challenge.name}</Text>
-      <Text style={styles.desc}>{challenge.description}</Text>
-      <Text style={styles.info}>Goal: {challenge.goalPoints} points</Text>
-      <Text style={styles.info}>Ends: {new Date(challenge.endDate).toLocaleString()}</Text>
-      <Text style={styles.info}>Status: {challenge.status}</Text>
-      {/* Show participants and their points */}
-      {challenge.participants && challenge.participants.length > 0 && (
-        <View style={{ marginTop: 12 }}>
-          <Text style={styles.leaderboardTitle}>Participants</Text>
-          {challenge.participants.map((p: any, i: number) => (
-            <Text key={p.user?._id || i} style={styles.leaderboardEntry}>
-              {i + 1}. {(p.user && (p.user.username || p.user.email)) || 'Unknown User'} - {p.points} points
+  const ChallengeDetails = ({ challenge }: { challenge: any }) => {
+    const currentUser = challenge.participants?.find((p: any) => p.user?._id === user?.id || p.user === user?.id);
+    const userProgress = currentUser?.points || 0;
+    const progressPercentage = Math.min((userProgress / challenge.goalPoints) * 100, 100);
+    
+    return (
+      <View style={styles.detailsContainer}>
+        <Text style={styles.title}>{challenge.name}</Text>
+        <Text style={styles.desc}>{challenge.description}</Text>
+        <Text style={styles.info}>Goal: {challenge.goalPoints} points</Text>
+        <Text style={styles.info}>Ends: {new Date(challenge.endDate).toLocaleString()}</Text>
+        <Text style={styles.info}>Status: {challenge.status}</Text>
+        
+        {currentUser && (
+          <View style={{ marginTop: 12, marginBottom: 12 }}>
+            <Text style={[styles.info, { fontWeight: 'bold' }]}>Your Progress</Text>
+            <Text style={styles.info}>Your Points: {userProgress} / {challenge.goalPoints}</Text>
+            <View style={{ 
+              width: '100%', 
+              height: 8, 
+              backgroundColor: '#e0e0e0', 
+              borderRadius: 4,
+              marginTop: 4 
+            }}>
+              <View style={{ 
+                width: `${progressPercentage}%`, 
+                height: '100%', 
+                backgroundColor: '#4CAF50', 
+                borderRadius: 4 
+              }} />
+            </View>
+            <Text style={[styles.info, { fontSize: 12 }]}>
+              {progressPercentage.toFixed(1)}% Complete
             </Text>
-          ))}
-        </View>
-      )}
-      <Button title="Show Leaderboard" onPress={() => fetchLeaderboard(challenge._id)} style={{ marginVertical: 8 }} />
-      {challenge.leaderboard && (
-        <View style={styles.leaderboard}>
-          <Text style={styles.leaderboardTitle}>Leaderboard</Text>
-          {challenge.leaderboard.map((p: any, i: number) => (
-            <Text key={p.user?._id || i} style={styles.leaderboardEntry}>
-              {i + 1}. {(p.user && (p.user.username || p.user.email)) || 'Unknown User'} - {p.points} points
-              {challenge.winner && challenge.winner === (p.user && p.user._id) && ' 🏆'}
-            </Text>
-          ))}
-        </View>
-      )}
-      <Button title="Back" onPress={() => setSelected(null)} style={{ marginTop: 12 }} />
-    </View>
-  );
+          </View>
+        )}
+        
+        {/* Show participants and their points */}
+        {challenge.participants && challenge.participants.length > 0 && (
+          <View style={{ marginTop: 12 }}>
+            <Text style={styles.leaderboardTitle}>Participants</Text>
+            {challenge.participants.map((p: any, i: number) => (
+              <Text key={p.user?._id || i} style={styles.leaderboardEntry}>
+                {i + 1}. {(p.user && (p.user.username || p.user.email)) || 'Unknown User'} - {p.points} points
+                {challenge.winner && challenge.winner === (p.user && p.user._id) && ' 🏆'}
+              </Text>
+            ))}
+          </View>
+        )}
+        <Button title="Show Leaderboard" onPress={() => fetchLeaderboard(challenge._id)} style={{ marginVertical: 8 }} />
+        {challenge.leaderboard && (
+          <View style={styles.leaderboard}>
+            <Text style={styles.leaderboardTitle}>Leaderboard</Text>
+            {challenge.leaderboard.map((p: any, i: number) => (
+              <Text key={p.user?._id || i} style={styles.leaderboardEntry}>
+                {i + 1}. {(p.user && (p.user.username || p.user.email)) || 'Unknown User'} - {p.points} points
+                {challenge.winner && challenge.winner === (p.user && p.user._id) && ' 🏆'}
+              </Text>
+            ))}
+          </View>
+        )}
+        <Button title="Back" onPress={() => setSelected(null)} style={{ marginTop: 12 }} />
+      </View>
+    );
+  };
 
   // Admin: List all challenges
   const AdminChallengeCard = ({ challenge }: { challenge: any }) => (
@@ -236,10 +340,13 @@ export default function ChallengesScreen() {
       {pointsSection}
       <View style={styles.tabRow}>
         <TouchableOpacity style={[styles.tab, tab === 'available' && styles.activeTab]} onPress={() => setTab('available')}>
-          <Text style={[styles.tabText, tab === 'available' && styles.activeTabText]}>Available Challenges</Text>
+          <Text style={[styles.tabText, tab === 'available' && styles.activeTabText]}>Challenges</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.tab, tab === 'my' && styles.activeTab]} onPress={() => setTab('my')}>
           <Text style={[styles.tabText, tab === 'my' && styles.activeTabText]}>My Challenges</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.tab, tab === 'completed' && styles.activeTab]} onPress={() => setTab('completed')}>
+          <Text style={[styles.tabText, tab === 'completed' && styles.activeTabText]}>Completed Challenges</Text>
         </TouchableOpacity>
         {isAdmin && (
           <TouchableOpacity style={[styles.tab, tab === 'admin' && styles.activeTab]} onPress={() => setTab('admin')}>
@@ -256,6 +363,9 @@ export default function ChallengesScreen() {
       ) : !loading && tab === 'my' ? (
         myChallenges.length === 0 ? <Text style={styles.empty}>You have not joined any challenges yet.</Text> :
         myChallenges.map(challenge => <ChallengeCard key={challenge._id} challenge={challenge} joined />)
+      ) : !loading && tab === 'completed' ? (
+        completedChallenges.length === 0 ? <Text style={styles.empty}>No completed challenges yet.</Text> :
+        completedChallenges.map(challenge => <ChallengeCard key={challenge._id} challenge={challenge} joined />)
       ) : (
         // Admin tab (only visible to admin)
         isAdmin && (

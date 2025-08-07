@@ -39,6 +39,7 @@ function mapParamToEcoType(param: string | undefined): EcoType {
     case 'plant-based-meal': // Support both variants
       return 'plantBasedMeal';
     case 'secondhand':
+    case 'secondhand-purchase': // Support both variants
       return 'secondHandPurchase';
     default:
       return 'cycling';
@@ -88,11 +89,13 @@ export default function LogActivityScreen() {
   useEffect(() => {
     if (actionType === 'walking') {
       Pedometer.isAvailableAsync().then((available) => {
+        console.log('Pedometer available:', available);
         if (!available) setSensorError('Step counter not supported on this device.');
       });
     }
     if (actionType === 'cycling') {
       Location.hasServicesEnabledAsync().then((enabled) => {
+        console.log('Location services enabled:', enabled);
         if (!enabled) setSensorError('Location services are not enabled.');
       });
     }
@@ -105,16 +108,20 @@ export default function LogActivityScreen() {
     let pedometerPermissionGranted = false;
     if (sessionActive && actionType === 'cycling') {
       (async () => {
+        console.log('Setting up cycling sensor...');
         let { status } = await Location.requestForegroundPermissionsAsync();
+        console.log('Location permission status:', status);
         if (status !== 'granted') {
           setSensorError('Location permission denied. Please enable location.');
           return;
         }
         locationPermissionGranted = true;
         setSensorError(null);
+        console.log('Starting location watch...');
         const sub = await Location.watchPositionAsync(
           { accuracy: Location.Accuracy.Highest, distanceInterval: 5 },
           (loc) => {
+            console.log('Location event received:', loc.coords);
             setDebugLog((log) => [
               `Location event: lat=${loc.coords.latitude}, lon=${loc.coords.longitude}, time=${new Date(loc.timestamp).toLocaleTimeString()}`,
               ...log.slice(0, 9)
@@ -124,35 +131,60 @@ export default function LogActivityScreen() {
                 { latitude: lastLocation.coords.latitude, longitude: lastLocation.coords.longitude },
                 { latitude: loc.coords.latitude, longitude: loc.coords.longitude }
               );
-              setDistance((d) => d + dx);
-              if (Math.floor((distance + dx) / 20) > Math.floor(distance / 20)) {
-                setPoints((p) => p + 3);
-              }
+              console.log('Distance calculated:', dx);
+              setDistance((d) => {
+                const newDistance = d + dx;
+                // Award points every 5 meters
+                if (Math.floor(newDistance / 5) > Math.floor(d / 5)) {
+                  console.log(`Awarding cycling points! Distance: ${d} -> ${newDistance}`);
+                  setPoints((p) => {
+                    const newPoints = p + 3;
+                    console.log(`Cycling points updated: ${p} -> ${newPoints}`);
+                    return newPoints;
+                  });
+                }
+                return newDistance;
+              });
             }
             setLastLocation(loc);
           }
         );
         setLocationSub(sub);
+        console.log('Location watch started');
       })();
     } else if (sessionActive && actionType === 'walking') {
       (async () => {
+        console.log('Setting up walking sensor...');
         const { status } = await Pedometer.requestPermissionsAsync();
+        console.log('Pedometer permission status:', status);
         if (status !== 'granted') {
           setSensorError('Motion/fitness permission denied. Please enable permissions.');
           return;
         }
         pedometerPermissionGranted = true;
         setSensorError(null);
+        console.log('Starting pedometer watch...');
         pedometerSub = Pedometer.watchStepCount(({ steps }: { steps: number }) => {
+          console.log('Pedometer step event received:', steps);
           setDebugLog((log) => [
             `Step event: steps=${steps}, time=${new Date().toLocaleTimeString()}`,
             ...log.slice(0, 9)
           ]);
-          setSteps((prev) => prev + steps);
-          if (Math.floor((steps + steps) / 15) > Math.floor(steps / 15)) {
-            setPoints((p) => p + 3);
-          }
+          setSteps((prev) => {
+            const newSteps = prev + steps;
+            // Award points every 5 steps
+            if (Math.floor(newSteps / 5) > Math.floor(prev / 5)) {
+              console.log(`Awarding points! Steps: ${prev} -> ${newSteps}`);
+              setPoints((p) => {
+                const newPoints = p + 3;
+                console.log(`Points updated: ${p} -> ${newPoints}`);
+                return newPoints;
+              });
+            }
+            return newSteps;
+          });
         });
+        console.log('Pedometer watch started');
       })();
     }
     return () => {
@@ -164,19 +196,33 @@ export default function LogActivityScreen() {
   // Timer effect
   useEffect(() => {
     if (sessionActive) {
-      setSessionStartTime(Date.now());
+      const startTime = Date.now();
+      setSessionStartTime(startTime);
+      
       const interval = setInterval(() => {
-        setSessionDuration(Math.floor((Date.now() - (sessionStartTime || Date.now())) / 1000));
+        const currentDuration = Math.floor((Date.now() - startTime) / 1000);
+        setSessionDuration(currentDuration);
+        
+        // Award points every 30 seconds as a fallback
+        if (currentDuration > 0 && currentDuration % 30 === 0) {
+          console.log('Timer-based points awarded at', currentDuration, 'seconds');
+          setPoints(p => p + 5);
+        }
       }, 1000);
+      
       setSessionInterval(interval);
+      
+      return () => {
+        clearInterval(interval);
+      };
     } else {
-      if (sessionInterval) clearInterval(sessionInterval);
+      if (sessionInterval) {
+        clearInterval(sessionInterval);
+        setSessionInterval(null);
+      }
       setSessionDuration(0);
       setSessionStartTime(null);
     }
-    return () => {
-      if (sessionInterval) clearInterval(sessionInterval);
-    };
   }, [sessionActive]);
 
   const startSession = () => {
@@ -200,8 +246,12 @@ export default function LogActivityScreen() {
         duration: sessionDuration,
         startTime: sessionStartTime ? new Date(sessionStartTime).toISOString() : undefined,
         endTime: new Date().toISOString(),
+        co2Saved: (points * 0.1).toFixed(2), // Calculate CO2 saved based on points
       };
-      await fetch(`${API_CONFIG.API_URL}/activity/log`, {
+      
+      console.log('Sending activity data to backend:', payload);
+      
+      const response = await fetch(`${API_CONFIG.API_URL}/activity/log`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -209,23 +259,53 @@ export default function LogActivityScreen() {
         },
         body: JSON.stringify(payload),
       });
-      Alert.alert('Session Ended', `You earned ${points} points!`);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Activity log error:', errorData);
+        Alert.alert('Error', 'Failed to log session data');
+        return;
+      }
+      
+      const result = await response.json();
+      console.log('Activity logged successfully:', result);
+      
+      // Refresh user and challenge data
+      // Note: These functions would need to be implemented or imported from appropriate stores
+      
+      Alert.alert('Session Ended', `You earned ${points} points! Check your challenges to see progress.`);
+      
       setSteps(0);
       setDistance(0);
       setPoints(0);
       setSessionDuration(0);
       setSessionStartTime(null);
     } catch (e) {
+      console.error('Activity log exception:', e);
       Alert.alert('Error', 'Failed to log session.');
     }
   };
 
   const pickMedia = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: 'images',
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
-      quality: 0.7,
+      aspect: [4, 3],
+      quality: 0.8,
     });
+    if (!result.canceled && result.assets && result.assets.length > 0) {
+      setMedia(result.assets[0]);
+    }
+  };
+
+  const takePicture = async () => {
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.8,
+    });
+    
     if (!result.canceled && result.assets && result.assets.length > 0) {
       setMedia(result.assets[0]);
     }
@@ -238,6 +318,13 @@ export default function LogActivityScreen() {
     }
     setUploading(true);
     try {
+      console.log('Starting media upload...');
+      console.log('Media:', media);
+      console.log('Action type:', actionType);
+      console.log('Description:', description);
+      console.log('API URL:', `${API_CONFIG.API_URL}/activity/media`);
+      console.log('Token:', token ? 'Present' : 'Missing');
+      
       const formData = new FormData();
       formData.append('file', {
         uri: media.uri,
@@ -246,18 +333,37 @@ export default function LogActivityScreen() {
       } as any);
       formData.append('actionType', actionType);
       formData.append('description', description);
-      await fetch(`${API_CONFIG.API_URL}/activity/media`, {
+      
+      console.log('FormData created, sending request...');
+      
+      const response = await fetch(`${API_CONFIG.API_URL}/activity/media`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
+          // Don't set Content-Type for FormData - let the browser set it with boundary
         },
         body: formData,
       });
+      
+      console.log('Response status:', response.status);
+      console.log('Response ok:', response.ok);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Upload failed:', errorText);
+        Alert.alert('Upload Failed', `Server returned ${response.status}: ${errorText}`);
+        return;
+      }
+      
+      const result = await response.json();
+      console.log('Upload successful:', result);
+      
       Alert.alert('Submitted!', 'Your action has been published for community voting.');
       setMedia(null);
       setDescription('');
-    } catch (e) {
-      Alert.alert('Error', 'Failed to upload action.');
+    } catch (e: any) {
+      console.error('Upload error:', e);
+      Alert.alert('Error', `Failed to upload action: ${e?.message || 'Unknown error'}`);
     } finally {
       setUploading(false);
     }
@@ -292,7 +398,7 @@ export default function LogActivityScreen() {
     if (!description) {
       Alert.alert('Missing Information', 'Please provide a description of your activity.');
       return;
-    }
+    }    
 
     if (!co2Saved || isNaN(parseFloat(co2Saved))) {
       Alert.alert('Invalid CO2 Value', 'Please enter a valid CO2 saved amount.');
@@ -361,6 +467,14 @@ export default function LogActivityScreen() {
                 {actionType === 'cycling' && <Text style={styles.label}>Distance: {distance.toFixed(1)} meters</Text>}
                 <Text style={styles.label}>Points: {points}</Text>
                 <Button title="Stop Session" variant="primary" onPress={stopSession} style={{ marginTop: 16 }} />
+                <Button 
+                  title="Test Points" 
+                  onPress={() => {
+                    console.log('Manual test: adding points');
+                    setPoints(p => p + 3);
+                  }} 
+                  style={{ marginTop: 8 }}
+                />
                 <View style={{ marginTop: 16, alignItems: 'flex-start', width: '100%' }}>
                   <Text style={{ fontSize: 12, color: Colors.textLight, marginBottom: 4 }}>Debug Log:</Text>
                   {debugLog.map((msg, i) => (
@@ -372,16 +486,34 @@ export default function LogActivityScreen() {
               <Button title="Start Session" variant="primary" onPress={startSession} />
             )}
           </View>
-        ) : (actionType === 'publicTransport' || actionType === 'plantBasedMeal') ? (
+        ) : (actionType === 'publicTransport' || actionType === 'plantBasedMeal' || actionType === 'secondHandPurchase') ? (
           <View style={{ marginVertical: 24 }}>
-            <Button
-              title={media ? 'Change Image' : 'Pick Image'}
-              variant="outline"
-              onPress={pickMedia}
-              style={{ marginBottom: 12 }}
-            />
+            <View style={{ flexDirection: 'row', marginBottom: 12 }}>
+              <Button
+                title="Take Photo"
+                variant="outline"
+                onPress={takePicture}
+                style={{ flex: 1, marginRight: 8 }}
+              />
+              <Button
+                title="Pick Image"
+                variant="outline"
+                onPress={pickMedia}
+                style={{ flex: 1, marginLeft: 8 }}
+              />
+            </View>
             {media && (
-              <Text style={{ fontSize: 14, color: Colors.textLight, marginBottom: 8 }}>Selected: {media.fileName || media.uri}</Text>
+              <View style={{ marginBottom: 12 }}>
+                <Text style={{ fontSize: 14, color: Colors.textLight, marginBottom: 8 }}>
+                  Selected: {media.fileName || media.uri}
+                </Text>
+                <TouchableOpacity 
+                  onPress={() => setMedia(null)}
+                  style={{ alignSelf: 'flex-start' }}
+                >
+                  <Text style={{ color: '#FF3B30', fontSize: 14 }}>Remove Photo</Text>
+                </TouchableOpacity>
+              </View>
             )}
             <TextInput
               style={styles.textInput}
@@ -396,7 +528,7 @@ export default function LogActivityScreen() {
               title={uploading ? 'Submitting...' : 'Submit Action'}
               variant="primary"
               onPress={handleMediaSubmit}
-              disabled={uploading}
+              disabled={uploading || !media}
               style={{ marginTop: 16 }}
             />
           </View>
@@ -525,4 +657,3 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
 });
-
